@@ -1,24 +1,46 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+## Frontend (Next.js + shadcn/ui + Supabase SSR + Vercel AI SDK)
 
 ## Getting Started
 
-First, run the development server:
+Install (China mirror recommended):
+
+```bash
+cd frontend
+npm_config_registry=https://registry.npmmirror.com npm install
+```
+
+Env:
+
+```bash
+cp .env.example .env
+```
+
+Required variables:
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `BACKEND_BASE_URL` (Python backend base URL, e.g. `http://localhost:8000`)
+
+Run:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Auth + Route Protection
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- Uses `@supabase/ssr` for server-side session handling.
+- `middleware.ts` redirects unauthenticated requests to `/login`.
+
+## Chat Streaming
+
+- UI uses Vercel AI SDK `useChat`.
+- Frontend calls `POST /api/chat` (Next.js Route Handler) which:
+  - injects `Authorization: Bearer <Supabase access_token>`
+  - proxies to the Python backend `/api/chat`
+  - streams the response back using Vercel AI SDK Data Stream Protocol.
 
 ## Learn More
 
