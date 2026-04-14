@@ -1,0 +1,36 @@
+.DS_Store
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.cache/
+
+# uv / venv
+.venv/
+
+# Logs
+*.log
+
+# Next.js
+node_modules/
+.next/
+out/
+dist/
+coverage/
+.turbo/
+
+# Supabase local (if used)
+supabase/.branches/
+supabase/.temp/
+supabase/.env
+
