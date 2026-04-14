@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import Link from "next/link"
 import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
@@ -204,8 +205,8 @@ export default function KnowledgeBasesPage() {
                 <div>Updated: {new Date(kb.updated_at).toLocaleString()}</div>
               </CardContent>
               <CardFooter className="justify-end gap-2">
-                <Button variant="outline" size="sm" disabled>
-                  Manage docs (soon)
+                <Button asChild variant="outline" size="sm">
+                  <Link href={`/knowledge-bases/${kb.id}`}>Manage docs</Link>
                 </Button>
               </CardFooter>
             </Card>

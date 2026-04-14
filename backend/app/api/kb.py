@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 from ..core.auth import CurrentUser, get_current_user
 from ..core.config import get_settings
+from ..services.document_service import get_kb_documents
 from ..services.kb_service import create_kb, delete_kb, get_user_kbs, update_kb
 
 
@@ -35,6 +36,22 @@ class UpdateKnowledgeBaseBody(BaseModel):
 
 class DeleteKnowledgeBaseResponse(BaseModel):
     ok: bool
+
+
+class DocumentOut(BaseModel):
+    id: str
+    kb_id: str
+    title: str
+    source: str | None = None
+    mime_type: str | None = None
+    status: str
+    error: str | None = None
+    created_at: str
+    updated_at: str
+
+
+class ListDocumentsResponse(BaseModel):
+    data: list[DocumentOut]
 
 
 @router.post("/api/kb", response_model=KnowledgeBaseOut)
@@ -104,4 +121,17 @@ async def delete_kb_route(
         if "not found" in msg.lower():
             raise HTTPException(status_code=404, detail=msg) from e
         raise HTTPException(status_code=400, detail=msg) from e
+
+
+@router.get("/api/kb/{id}/documents", response_model=ListDocumentsResponse)
+async def list_kb_documents(
+    id: str = Path(..., description="Knowledge base id"),
+    user: CurrentUser = Depends(get_current_user),
+) -> ListDocumentsResponse:
+    try:
+        settings = get_settings()
+        rows = await get_kb_documents(settings=settings, user_id=user.user_id, kb_id=id)
+        return ListDocumentsResponse(data=[DocumentOut(**r) for r in rows])
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 

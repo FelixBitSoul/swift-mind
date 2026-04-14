@@ -30,6 +30,23 @@ export function AppSidebar() {
 
       <SidebarContent>
         <SidebarGroup>
+          <SidebarGroupLabel>Knowledge</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  render={<Link href="/knowledge-bases" />}
+                  isActive={pathname === "/knowledge-bases"}
+                  tooltip="Knowledge Bases"
+                >
+                  <span>Knowledge Bases</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
           <SidebarGroupLabel>Conversations</SidebarGroupLabel>
           <SidebarGroupContent>
             <ScrollArea className="h-[calc(100svh-8rem)]">
