@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from ..core.auth import CurrentUser, get_current_user
 from ..core.config import get_settings
 from ..services.ingestion_service import IngestRequest, IngestionService
 
@@ -11,7 +12,6 @@ router = APIRouter()
 
 
 class IngestBody(BaseModel):
-    user_id: str = Field(..., description="Owner user id (auth.uid())")
     kb_id: str
     doc_id: str
     bucket: str = Field(..., description="Supabase Storage bucket name")
@@ -25,13 +25,13 @@ class IngestResponse(BaseModel):
 
 
 @router.post("/api/ingest", response_model=IngestResponse)
-def ingest(body: IngestBody) -> IngestResponse:
+def ingest(body: IngestBody, user: CurrentUser = Depends(get_current_user)) -> IngestResponse:
     try:
         settings = get_settings()
         service = IngestionService(settings)
         result = service.ingest(
             IngestRequest(
-                user_id=body.user_id,
+                user_id=user.user_id,
                 kb_id=body.kb_id,
                 doc_id=body.doc_id,
                 bucket=body.bucket,

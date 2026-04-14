@@ -21,12 +21,23 @@ export async function POST(req: Request) {
     top_k?: number;
   };
 
+  const { data: sessionData } = await supabase.auth.getSession();
+  const accessToken = sessionData.session?.access_token;
+  if (!accessToken) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { "content-type": "application/json" },
+    });
+  }
+
   const upstream = await fetch(`${env.backendBaseUrl}/api/chat`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${accessToken}`,
+    },
     body: JSON.stringify({
       ...body,
-      user_id: user.id,
     }),
   });
 

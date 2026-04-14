@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Iterable, Iterator, Sequence
+from typing import Iterator, Sequence
 
 from llama_index.core.schema import NodeWithScore
 from llama_index.core.vector_stores import MetadataFilter, MetadataFilters
