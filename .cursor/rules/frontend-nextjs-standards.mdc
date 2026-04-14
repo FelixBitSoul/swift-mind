@@ -1,0 +1,25 @@
+---
+description: Frontend rules (Next.js App Router, shadcn/ui, hooks separation, useChat)
+globs: frontend/src/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# Frontend rules (Next.js + shadcn/ui + Supabase SSR + AI SDK)
+
+## UI vs hooks separation
+
+- UI components go in `src/components/**`.
+- Business/data hooks go in `src/hooks/**`.
+- Shared clients/env/helpers go in `src/lib/**`.
+
+## Supabase auth (SSR)
+
+- Use `@supabase/ssr` helpers in `src/lib/supabase/*`.
+- Route protection is done via `frontend/middleware.ts`.
+
+## Chat integration
+
+- UI uses `@ai-sdk/react` `useChat`.
+- Always include `conversation_id` + selected `kb_ids` in request body.
+- Call Next.js `POST /api/chat` route handler (it injects Bearer JWT and proxies to backend).
+

@@ -1,0 +1,25 @@
+---
+description: Backend FastAPI rules (Supabase JWT auth, user_id filtering, streaming)
+globs: backend/**/*.py
+alwaysApply: false
+---
+
+# Backend rules (FastAPI + LlamaIndex + Supabase)
+
+## Auth dependency
+
+- Use `backend/app/core/auth.py:get_current_user` and depend on it in routes.
+- Do not accept `user_id` from the client. Always use `CurrentUser.user_id`.
+
+## DB access
+
+- Any `.select/.update/.delete` on Supabase tables must include `.eq("user_id", user_id)` (or be otherwise provably scoped).
+- For `documents`, always constrain by both `id` and `user_id`.
+
+## Streaming to Vercel AI SDK
+
+- `/api/chat` must return **Data Stream Protocol** parts:
+  - text: `0:"token"\n`
+  - finish: `d:{...}\n`
+- Never write assistant message to DB per token; write once on completion.
+

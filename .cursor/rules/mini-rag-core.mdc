@@ -1,0 +1,31 @@
+---
+description: Hard constraints for this RAG system (HTTP-only model calls, security, layering)
+alwaysApply: true
+---
+
+# mini-rag core rules (MUST FOLLOW)
+
+## Model calls: HTTP-only
+
+- All LLM + embedding calls **must** go through **OpenAI-compatible HTTP APIs**.
+- **Forbidden**: adding local inference / heavy ML deps (e.g. `torch`, `transformers`, HF default stacks, `sentence-transformers`, `onnxruntime`, `faiss`).
+- Embeddings must use **`llama_index.embeddings.openai.OpenAIEmbedding`** pointed at SiliconFlow.
+- LLM must use **`llama_index.llms.openai.OpenAI`** pointed at DeepSeek.
+
+## Auth + multi-tenancy (Supabase)
+
+- Backend endpoints require `Authorization: Bearer <Supabase JWT>`.
+- Never trust `user_id` from request body/querystring.
+- All DB reads/writes must be constrained to the authenticated `user_id` (RLS + explicit filters).
+
+## RAG retrieval
+
+- Retrieval must apply metadata filters for **`user_id`** and selected **`kb_ids`**.
+- Vector dimension is **1024** (BGE-M3). Do not change without schema migration.
+
+## Structure / ownership
+
+- Keep **UI components** and **business hooks/services** separated:
+  - frontend: UI in `src/components/**`, hooks in `src/hooks/**`, infra clients in `src/lib/**`
+  - backend: routes in `backend/app/api/**`, services in `backend/app/services/**`, infra in `backend/app/infra/**`
+

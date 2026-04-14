@@ -1,0 +1,18 @@
+---
+description: Supabase schema + RLS invariants (multi-tenant tables, vector dim, policies)
+globs: "**/*.{sql,md}"
+alwaysApply: false
+---
+
+# Supabase invariants
+
+## Tables / columns
+
+- `doc_chunks.embedding` must remain `vector(1024)` (BGE-M3).
+- `knowledge_bases`, `documents`, `doc_chunks`, `conversations`, `messages` are multi-tenant with `user_id`.
+
+## RLS
+
+- RLS must be enabled on all user-owned tables.
+- Policies must enforce `auth.uid() = user_id` for select/insert/update/delete.
+
