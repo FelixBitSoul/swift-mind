@@ -4,13 +4,13 @@ import { useMemo } from "react";
 
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useKnowledgeBases } from "@/hooks/use-knowledge-bases";
+import { useKBs } from "@/hooks/use-knowledge-bases";
 
 export function KnowledgeBaseMultiSelect(props: {
   value: string[];
   onChange: (next: string[]) => void;
 }) {
-  const { data, isLoading } = useKnowledgeBases();
+  const { data, isLoading } = useKBs();
 
   const selected = useMemo(() => new Set(props.value), [props.value]);
 

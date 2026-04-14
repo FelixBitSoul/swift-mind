@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryProvider } from "@/components/providers/query-provider";
+import { Toaster } from "@/components/ui/sonner";
 
 export const metadata: Metadata = {
   title: "Create Next App",
@@ -19,6 +20,7 @@ export default function RootLayout({
         <QueryProvider>
           <TooltipProvider>{children}</TooltipProvider>
         </QueryProvider>
+        <Toaster />
       </body>
     </html>
   );

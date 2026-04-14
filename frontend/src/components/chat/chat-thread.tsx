@@ -14,12 +14,20 @@ function roleLabel(role: string) {
   return role;
 }
 
-function messageToText(message: any): string {
-  if (typeof message?.content === "string") return message.content;
-  const parts = Array.isArray(message?.parts) ? message.parts : [];
+function messageToText(message: unknown): string {
+  if (typeof message === "object" && message !== null) {
+    const maybeContent = (message as Record<string, unknown>).content;
+    if (typeof maybeContent === "string") return maybeContent;
+  }
+
+  const parts =
+    typeof message === "object" && message !== null && Array.isArray((message as Record<string, unknown>).parts)
+      ? ((message as Record<string, unknown>).parts as unknown[])
+      : [];
+
   const text = parts
-    .filter((p: any) => p?.type === "text" && typeof p?.text === "string")
-    .map((p: any) => p.text)
+    .filter((p) => typeof p === "object" && p !== null && (p as Record<string, unknown>).type === "text")
+    .map((p) => ((p as Record<string, unknown>).text as string | undefined) ?? "")
     .join("");
   return text || "";
 }

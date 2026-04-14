@@ -1,24 +1,54 @@
-import { NextResponse } from "next/server";
-
+import { env } from "@/lib/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-export async function GET() {
+async function getAccessToken(): Promise<string | null> {
   const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
+  const { data: sessionData } = await supabase.auth.getSession();
+  return sessionData.session?.access_token ?? null;
+}
 
-  if (userError || !user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export async function GET() {
+  const accessToken = await getAccessToken();
+  if (!accessToken) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { "content-type": "application/json" },
+    });
   }
 
-  const { data, error } = await supabase
-    .from("knowledge_bases")
-    .select("id,name,description,created_at,updated_at")
-    .order("updated_at", { ascending: false });
+  const upstream = await fetch(`${env.backendBaseUrl}/api/kb`, {
+    method: "GET",
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-  return NextResponse.json({ data: data ?? [] });
+  return new Response(await upstream.text(), {
+    status: upstream.status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+export async function POST(req: Request) {
+  const accessToken = await getAccessToken();
+  if (!accessToken) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { "content-type": "application/json" },
+    });
+  }
+
+  const body = await req.text();
+  const upstream = await fetch(`${env.backendBaseUrl}/api/kb`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${accessToken}`,
+    },
+    body,
+  });
+
+  return new Response(await upstream.text(), {
+    status: upstream.status,
+    headers: { "content-type": "application/json" },
+  });
 }
 

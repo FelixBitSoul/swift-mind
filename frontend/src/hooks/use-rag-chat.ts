@@ -10,12 +10,22 @@ export type RagChatConfig = {
 
 export function useRagChat(config: RagChatConfig) {
   const chat = useChat({
-    messages: config.initialMessages as any,
+    messages: (config.initialMessages ?? []).map((m) => ({
+      id: m.id,
+      role: m.role,
+      content: m.content,
+    })) as unknown,
   });
 
   async function sendText(text: string) {
     // Attach conversation_id and kb_ids on every request body.
-    return (chat as any).sendMessage(
+    const sender = chat as unknown as {
+      sendMessage: (
+        msg: { text: string },
+        opts: { body: { conversation_id: string; kb_ids: string[] } }
+      ) => Promise<unknown>
+    }
+    return sender.sendMessage(
       { text },
       {
         body: {

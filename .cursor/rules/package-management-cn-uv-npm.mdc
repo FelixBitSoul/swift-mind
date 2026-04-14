@@ -1,0 +1,21 @@
+---
+description: Package management conventions (uv for Python, China npm mirror)
+alwaysApply: true
+---
+
+# Package management conventions
+
+## Python (uv)
+
+- Use `uv` to manage Python dependencies (source of truth: `pyproject.toml` + `uv.lock`).
+- Install/sync dependencies with `uv sync`.
+- Add Python deps with `uv add <pkg>` (or `uv add --dev <pkg>`).
+- Run Python commands via `uv run ...` when appropriate.
+
+## Node (China npm mirror)
+
+- When installing Node deps in this repo, use a China-friendly registry mirror to avoid timeouts.
+- Prefer project-local config so installs are reproducible:
+  - add/keep `.npmrc` with `registry=https://registry.npmmirror.com`
+  - avoid relying on global `npm config` on developer machines
+

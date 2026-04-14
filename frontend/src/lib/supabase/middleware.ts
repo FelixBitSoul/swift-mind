@@ -5,7 +5,7 @@ import { createServerClient } from "@supabase/ssr";
 import { env } from "@/lib/env";
 
 export function updateSession(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request });
+  const supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(env.supabaseUrl, env.supabaseAnonKey, {
     cookies: {
