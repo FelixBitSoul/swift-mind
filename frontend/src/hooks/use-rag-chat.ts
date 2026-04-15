@@ -1,6 +1,7 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
+import type { UIMessage } from "ai";
 
 export type RagChatConfig = {
   conversationId: string;
@@ -10,11 +11,13 @@ export type RagChatConfig = {
 
 export function useRagChat(config: RagChatConfig) {
   const chat = useChat({
-    messages: (config.initialMessages ?? []).map((m) => ({
-      id: m.id,
-      role: m.role,
-      content: m.content,
-    })) as unknown,
+    messages: (config.initialMessages ?? []).map(
+      (m): UIMessage => ({
+        id: m.id,
+        role: m.role,
+        parts: [{ type: "text", text: m.content }],
+      })
+    ),
   });
 
   async function sendText(text: string) {

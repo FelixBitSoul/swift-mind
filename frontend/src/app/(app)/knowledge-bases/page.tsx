@@ -8,7 +8,7 @@ import { useForm } from "react-hook-form"
 import { toast } from "sonner"
 import { PlusIcon, TrashIcon } from "lucide-react"
 
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import {
   Card,
   CardAction,
@@ -34,6 +34,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { useCreateKB, useDeleteKB, useKBs } from "@/hooks/use-knowledge-bases"
+import { cn } from "@/lib/utils"
 
 const createSchema = z.object({
   name: z.string().min(1, "Name is required").max(200, "Max 200 chars"),
@@ -205,9 +206,12 @@ export default function KnowledgeBasesPage() {
                 <div>Updated: {new Date(kb.updated_at).toLocaleString()}</div>
               </CardContent>
               <CardFooter className="justify-end gap-2">
-                <Button asChild variant="outline" size="sm">
-                  <Link href={`/knowledge-bases/${kb.id}`}>Manage docs</Link>
-                </Button>
+                <Link
+                  href={`/knowledge-bases/${kb.id}`}
+                  className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+                >
+                  Manage docs
+                </Link>
               </CardFooter>
             </Card>
           ))}

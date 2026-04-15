@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { MoreVerticalIcon, PencilIcon, Trash2Icon } from "lucide-react";
 import { toast } from "sonner";
 
@@ -41,13 +41,45 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { type Conversation } from "@/hooks/use-conversations";
 
-export function ConversationSidebarItem({ conversation: c }: { conversation: Conversation }) {
+export function ConversationSidebarItem({
+  conversation: c,
+  optimisticHref,
+  onNavigate,
+  navigating,
+}: {
+  conversation: Conversation;
+  optimisticHref?: string | null;
+  onNavigate?: (href: string) => void;
+  navigating?: boolean;
+}) {
   const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
 
   const href = `/c/${c.id}`;
-  const active = pathname === href;
+  const active = pathname === href || optimisticHref === href;
+  const shouldOptimisticNavigate = Boolean(onNavigate);
+
+  // Prefetching every item on mount can cause network/CPU contention for large lists.
+  // Instead, prefetch on hover/focus (once) to improve perceived navigation latency.
+  const hasPrefetchedRef = useRef(false);
+  const prefetchOnce = useCallback(() => {
+    if (!shouldOptimisticNavigate) return;
+    if (hasPrefetchedRef.current) return;
+    hasPrefetchedRef.current = true;
+    router.prefetch(href);
+  }, [href, router, shouldOptimisticNavigate]);
+
+  const handleNavigate = useCallback(
+    (e: React.MouseEvent) => {
+      if (!onNavigate) return;
+      // Let modified clicks (new tab / etc.) behave like normal links.
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+      e.preventDefault();
+      onNavigate(href);
+    },
+    [href, onNavigate]
+  );
 
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameTitle, setRenameTitle] = useState("");
@@ -60,6 +92,8 @@ export function ConversationSidebarItem({ conversation: c }: { conversation: Con
     setRenameTitle(c.title?.trim() ? c.title : "Untitled");
     setRenameOpen(true);
   }, [c.title]);
+
+  const itemLabel = useMemo(() => c.title ?? "Untitled", [c.title]);
 
   const saveRename = useCallback(async () => {
     const title = renameTitle.trim();
@@ -124,15 +158,19 @@ export function ConversationSidebarItem({ conversation: c }: { conversation: Con
         <SidebarMenuButton
           render={<Link href={href} />}
           isActive={active}
-          tooltip={c.title ?? "Untitled"}
+          tooltip={itemLabel}
           className={cn(
             "rounded-full pr-10 transition-colors",
             active
               ? "bg-primary/15 font-medium text-primary shadow-none hover:bg-primary/20 hover:text-primary data-active:bg-primary/15 data-active:text-primary"
               : "text-sidebar-foreground/80 hover:bg-sidebar-accent/80 hover:text-sidebar-foreground"
           )}
+          onClick={handleNavigate}
+          onMouseEnter={prefetchOnce}
+          onFocus={prefetchOnce}
+          aria-disabled={navigating && !active}
         >
-          <span className="truncate">{c.title ?? "Untitled"}</span>
+          <span className="truncate">{itemLabel}</span>
         </SidebarMenuButton>
 
         <DropdownMenu>

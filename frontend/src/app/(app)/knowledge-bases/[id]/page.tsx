@@ -6,7 +6,7 @@ import { useParams } from "next/navigation"
 import { toast } from "sonner"
 import { ArrowLeftIcon, RefreshCwIcon, TrashIcon } from "lucide-react"
 
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import {
   Card,
   CardAction,
@@ -28,6 +28,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { type KBDocument, useDeleteDocument, useKBDocuments } from "@/hooks/use-documents"
+import { cn } from "@/lib/utils"
 
 function statusLabel(status: string) {
   if (status === "processing") return "Processing"
@@ -69,11 +70,13 @@ export default function KnowledgeBaseDetailPage() {
     <div className="flex flex-1 flex-col gap-6 p-6">
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <Button asChild variant="ghost" size="icon-sm" aria-label="Back">
-            <Link href="/knowledge-bases">
-              <ArrowLeftIcon />
-            </Link>
-          </Button>
+          <Link
+            href="/knowledge-bases"
+            aria-label="Back"
+            className={cn(buttonVariants({ variant: "ghost", size: "icon-sm" }))}
+          >
+            <ArrowLeftIcon />
+          </Link>
           <div>
             <div className="text-2xl font-semibold tracking-tight">Documents</div>
             <div className="text-sm text-muted-foreground">Knowledge base: {kbId}</div>

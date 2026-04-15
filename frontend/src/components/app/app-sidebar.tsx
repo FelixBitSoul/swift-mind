@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
 import { PlusIcon } from "lucide-react";
 import { toast } from "sonner";
 
@@ -30,6 +30,24 @@ export function AppSidebar() {
   const queryClient = useQueryClient();
   const { data, isLoading } = useConversations();
   const [creating, setCreating] = useState(false);
+  const [optimisticHref, setOptimisticHref] = useState<string | null>(null);
+  const [isNavigating, startNavigating] = useTransition();
+
+  useEffect(() => {
+    if (optimisticHref && pathname === optimisticHref) {
+      setOptimisticHref(null);
+    }
+  }, [optimisticHref, pathname]);
+
+  const navigateConversation = useCallback(
+    (href: string) => {
+      setOptimisticHref(href);
+      startNavigating(() => {
+        router.push(href);
+      });
+    },
+    [router]
+  );
 
   const createConversation = useCallback(async () => {
     setCreating(true);
@@ -84,7 +102,13 @@ export function AppSidebar() {
                   </>
                 ) : (
                   (data ?? []).map((c: Conversation) => (
-                    <ConversationSidebarItem key={c.id} conversation={c} />
+                    <ConversationSidebarItem
+                      key={c.id}
+                      conversation={c}
+                      optimisticHref={optimisticHref}
+                      onNavigate={navigateConversation}
+                      navigating={isNavigating}
+                    />
                   ))
                 )}
               </SidebarMenu>
