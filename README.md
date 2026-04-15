@@ -1,11 +1,20 @@
-# mini-rag
+# SwiftMind
 
-RAG system starter structure.
+SwiftMind 是一个**个人全能知识助理**：把你的 PDF / Markdown 文档沉淀到知识库（Knowledge Base），然后基于你选择的知识库进行对话问答、总结与执行清单生成。
 
-## Frontend UX
+## 产品能力（当前版本）
 
-- After sign-in, the app now shows a global user avatar menu at the top-right of all `/(app)` pages.
-- Click the avatar to open the user menu and use **退出登录** to sign out and return to `/login`.
+- **知识库管理**：创建、重命名、更新描述、删除知识库
+- **文档管理**：上传 PDF / Markdown 到知识库，自动切分与向量化
+- **知识库对话**：选择一个或多个知识库，在对话中优先基于所选知识库回答
+- **多租户隔离**：所有数据按 Supabase 登录用户隔离（RLS + 服务端显式 `user_id` 过滤）
+- **退出登录**：登录后右上角头像菜单中提供 **退出登录**
+
+## 架构概览
+
+- **Frontend**：Next.js App Router（UI / 登录态 / 对话交互）
+- **Backend**：FastAPI + LlamaIndex（ingestion / 检索 / RAG）
+- **Supabase**：Auth（JWT）/ Database（RLS）/ Storage（文档）
 
 ## Backend (Python + uv + FastAPI + LlamaIndex + Supabase)
 

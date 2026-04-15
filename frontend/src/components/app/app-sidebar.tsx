@@ -23,6 +23,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ConversationSidebarItem } from "@/components/app/conversation-sidebar-item";
 import { DraftConversationSidebarItem, type DraftConversation } from "@/components/app/draft-conversation-sidebar-item";
+import { Brand } from "@/components/app/brand";
 import { type Conversation, useConversations } from "@/hooks/use-conversations";
 
 export function AppSidebar() {
@@ -87,7 +88,7 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon" variant="sidebar">
       <SidebarHeader>
-        <div className="px-2 py-1 text-sm font-semibold tracking-tight">History</div>
+        <Brand subtitle="Personal knowledge assistant" />
       </SidebarHeader>
 
       <SidebarContent className="gap-0">
