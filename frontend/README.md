@@ -40,6 +40,34 @@ Open `http://localhost:3000`.
 - Uses `@supabase/ssr` for server-side session handling.
 - `middleware.ts` redirects unauthenticated requests to `/login`.
 
+## GitHub OAuth Login (Supabase)
+
+This project supports **email/password** login and **GitHub OAuth** login via Supabase.
+
+### 1) Enable GitHub provider in Supabase
+
+In Supabase Dashboard → Authentication → Providers → GitHub:
+- Enable GitHub
+- Fill **Client ID** and **Client Secret** from your GitHub OAuth App
+
+In Supabase Dashboard → Authentication → URL Configuration:
+- Add Redirect URLs:
+  - `http://localhost:3000/auth/callback`
+  - `https://<your-domain>/auth/callback`
+
+### 2) Create a GitHub OAuth App
+
+GitHub → Settings → Developer settings → OAuth Apps → New OAuth App:
+- **Homepage URL**
+  - `http://localhost:3000` (local)
+  - `https://<your-domain>` (production)
+- **Authorization callback URL** (Supabase callback)
+  - `https://<your-supabase-ref>.supabase.co/auth/v1/callback`
+
+### 3) Try it
+
+Open `/login` and click **Continue with GitHub**. After authorization you'll return to the app and the session cookie will be set.
+
 ## Chat Streaming
 
 - UI uses Vercel AI SDK `useChat`.

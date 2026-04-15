@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,12 @@ export default async function LoginPage(props: { searchParams: SearchParams }) {
   const { redirectTo } = await props.searchParams;
   const next = redirectTo ?? "/";
 
+  function getOriginFromHeaders(h: Headers) {
+    const proto = h.get("x-forwarded-proto") ?? "http";
+    const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
+    return `${proto}://${host}`;
+  }
+
   async function signIn(formData: FormData) {
     "use server";
     const email = String(formData.get("email") ?? "");
@@ -28,6 +35,22 @@ export default async function LoginPage(props: { searchParams: SearchParams }) {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) redirect(`/login?error=${encodeURIComponent(error.message)}`);
     redirect(next);
+  }
+
+  async function signInWithGithub() {
+    "use server";
+    const supabase = await createSupabaseServerClient();
+    const origin = getOriginFromHeaders(await headers());
+    const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent(next)}`;
+
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "github",
+      options: { redirectTo },
+    });
+
+    if (error) redirect(`/login?error=${encodeURIComponent(error.message)}`);
+    if (!data.url) redirect(`/login?error=${encodeURIComponent("Missing OAuth redirect URL")}`);
+    redirect(data.url);
   }
 
   return (
@@ -43,6 +66,16 @@ export default async function LoginPage(props: { searchParams: SearchParams }) {
             <Input name="password" type="password" placeholder="Password" required />
             <Button type="submit" className="w-full">
               Sign in
+            </Button>
+          </form>
+          <div className="my-4 flex items-center gap-3">
+            <div className="h-px flex-1 bg-border" />
+            <div className="text-xs text-muted-foreground">OR</div>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+          <form action={signInWithGithub}>
+            <Button type="submit" variant="outline" className="w-full">
+              Continue with GitHub
             </Button>
           </form>
           <div className="mt-4 text-sm text-muted-foreground">
