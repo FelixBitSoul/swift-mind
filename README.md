@@ -2,6 +2,11 @@
 
 RAG system starter structure.
 
+## Frontend UX
+
+- After sign-in, the app now shows a global user avatar menu at the top-right of all `/(app)` pages.
+- Click the avatar to open the user menu and use **退出登录** to sign out and return to `/login`.
+
 ## Backend (Python + uv + FastAPI + LlamaIndex + Supabase)
 
 - All model calls (LLM + embeddings) must be made **only via HTTP APIs**.

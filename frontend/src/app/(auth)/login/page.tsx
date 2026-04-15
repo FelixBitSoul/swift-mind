@@ -20,12 +20,6 @@ export default async function LoginPage(props: { searchParams: SearchParams }) {
   const { redirectTo } = await props.searchParams;
   const next = redirectTo ?? "/";
 
-  function getOriginFromHeaders(h: Headers) {
-    const proto = h.get("x-forwarded-proto") ?? "http";
-    const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
-    return `${proto}://${host}`;
-  }
-
   async function signIn(formData: FormData) {
     "use server";
     const email = String(formData.get("email") ?? "");
@@ -40,7 +34,10 @@ export default async function LoginPage(props: { searchParams: SearchParams }) {
   async function signInWithGithub() {
     "use server";
     const supabase = await createSupabaseServerClient();
-    const origin = getOriginFromHeaders(await headers());
+    const h = await headers();
+    const proto = h.get("x-forwarded-proto") ?? "http";
+    const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
+    const origin = `${proto}://${host}`;
     const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent(next)}`;
 
     const { data, error } = await supabase.auth.signInWithOAuth({

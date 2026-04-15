@@ -174,7 +174,7 @@ export function ChatThread(props: {
   }
 
   return (
-    <div className="flex h-[calc(100svh-1rem)] w-full">
+    <div className="flex h-full min-h-0 w-full">
       <div className="relative flex min-w-0 flex-1 flex-col">
         <div className="border-b">
           <div className={cn(containerClass, "flex items-center justify-between gap-3 py-4")}>
