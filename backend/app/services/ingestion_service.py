@@ -5,7 +5,6 @@ from pathlib import Path
 
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.core.schema import Document as LlamaDocument
-from llama_index.vector_stores.supabase import SupabaseVectorStore
 
 from ..core.config import Settings
 from ..infra.embeddings.siliconflow import get_siliconflow_embedding_model
@@ -36,10 +35,36 @@ class IngestionService:
         self._embed_model = get_siliconflow_embedding_model(settings)
         self._reader = PyMuPDFReader()
         self._splitter = SentenceSplitter(chunk_size=1024, chunk_overlap=128)
-        self._vector_store = SupabaseVectorStore(
-            supabase_client=self._supabase,
-            table_name="doc_chunks",
+
+    def _write_chunks(self, *, req: IngestRequest, nodes, embeddings) -> None:
+        # Ensure idempotency for re-ingestion
+        (
+            self._supabase.table("doc_chunks")
+            .delete()
+            .eq("doc_id", req.doc_id)
+            .eq("user_id", req.user_id)
+            .execute()
         )
+
+        rows = []
+        for i, n in enumerate(nodes):
+            # store text in dedicated column, and keep metadata for retrieval filters
+            rows.append(
+                {
+                    "user_id": req.user_id,
+                    "kb_id": req.kb_id,
+                    "doc_id": req.doc_id,
+                    "chunk_index": i,
+                    "content": n.get_content(metadata_mode="none"),
+                    "metadata": dict(n.metadata or {}),
+                    "embedding": embeddings[i],
+                }
+            )
+
+        # Insert in batches to avoid payload limits
+        batch_size = 200
+        for start in range(0, len(rows), batch_size):
+            self._supabase.table("doc_chunks").insert(rows[start : start + batch_size]).execute()
 
     def _parse_bytes(self, file_bytes: bytes, req: IngestRequest) -> ParsedDocument:
         """Return ParsedDocument from pymupdf_reader (text + page_count)."""
@@ -81,8 +106,8 @@ class IngestionService:
             n.metadata.update(base_metadata)
             n.metadata["chunk_index"] = i
 
-        # 5) write to SupabaseVectorStore; tags injected via metadata (and optionally mapped server-side)
-        self._vector_store.add(nodes)
+        # 5) write to Supabase `doc_chunks` table (pgvector(1024))
+        self._write_chunks(req=req, nodes=nodes, embeddings=embeddings)
 
         # 6) update documents.status -> ready
         (

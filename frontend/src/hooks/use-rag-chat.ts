@@ -1,6 +1,7 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
+import { TextStreamChatTransport } from "ai";
 import type { UIMessage } from "ai";
 
 export type RagChatConfig = {
@@ -11,6 +12,7 @@ export type RagChatConfig = {
 
 export function useRagChat(config: RagChatConfig) {
   const chat = useChat({
+    transport: new TextStreamChatTransport({ api: "/api/chat" }),
     messages: (config.initialMessages ?? []).map(
       (m): UIMessage => ({
         id: m.id,

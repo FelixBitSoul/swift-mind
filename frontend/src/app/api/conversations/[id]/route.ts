@@ -14,21 +14,31 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   }
 
   const { id } = await ctx.params;
-  let body: { title?: string };
+  let body: { title?: string; kb_ids?: string[] };
   try {
-    body = (await req.json()) as { title?: string };
+    body = (await req.json()) as { title?: string; kb_ids?: string[] };
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const title = typeof body.title === "string" ? body.title.trim() : "";
-  if (!title) {
-    return NextResponse.json({ error: "Title is required" }, { status: 400 });
+  const patch: { title?: string; kb_ids?: string[] } = {};
+  if ("title" in body) {
+    const title = typeof body.title === "string" ? body.title.trim() : "";
+    if (!title) {
+      return NextResponse.json({ error: "Title is required" }, { status: 400 });
+    }
+    patch.title = title;
+  }
+  if ("kb_ids" in body) {
+    patch.kb_ids = Array.isArray(body.kb_ids) ? body.kb_ids.map(String).filter(Boolean) : [];
+  }
+  if (Object.keys(patch).length === 0) {
+    return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
   }
 
   const { data, error } = await supabase
     .from("conversations")
-    .update({ title })
+    .update(patch)
     .eq("id", id)
     .eq("user_id", user.id)
     .select("id,title,updated_at,created_at,kb_ids")

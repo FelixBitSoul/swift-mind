@@ -117,7 +117,7 @@ async def upload_kb_document_file(
             },
         )
 
-    def _update_status(*, status: str, error: str | None) -> None:
+    def _update_status(status: str, error: str | None) -> None:
         supabase.table("documents").update({"status": status, "error": error}).eq("id", doc_id).eq(
             "user_id", user_id
         ).execute()
@@ -128,7 +128,7 @@ async def upload_kb_document_file(
     await anyio.to_thread.run_sync(_insert_row)
     try:
         await anyio.to_thread.run_sync(_upload_storage)
-        await anyio.to_thread.run_sync(_update_status, status="processing", error=None)
+        await anyio.to_thread.run_sync(_update_status, "processing", None)
 
         def _ingest() -> None:
             IngestionService(settings).ingest(
@@ -160,7 +160,7 @@ async def upload_kb_document_file(
         return await anyio.to_thread.run_sync(_fetch_row)
     except Exception as e:
         await anyio.to_thread.run_sync(_delete_chunks_best_effort)
-        await anyio.to_thread.run_sync(_update_status, status="failed", error=str(e))
+        await anyio.to_thread.run_sync(_update_status, "failed", str(e))
         raise
 
 

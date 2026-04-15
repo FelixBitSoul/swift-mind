@@ -1,16 +1,14 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from typing import Iterator, Sequence
 
 from llama_index.core.schema import NodeWithScore
-from llama_index.core.vector_stores import MetadataFilter, MetadataFilters
-from llama_index.core.vector_stores.types import FilterOperator
-from llama_index.core.vector_stores.utils import node_to_metadata_dict
 from llama_index.core.base.llms.types import ChatMessage, MessageRole
-from llama_index.core.indices.vector_store import VectorStoreIndex
-from llama_index.vector_stores.supabase import SupabaseVectorStore
+from llama_index.core.schema import TextNode
+from llama_index.core.vector_stores.utils import node_to_metadata_dict
 
 from ..core.config import Settings
 from ..infra.embeddings.siliconflow import get_siliconflow_embedding_model
@@ -33,14 +31,6 @@ class ChatService:
         self._supabase = get_supabase_client(settings)
         self._embed_model = get_siliconflow_embedding_model(settings)
         self._llm = get_deepseek_llm(settings)
-        self._vector_store = SupabaseVectorStore(
-            supabase_client=self._supabase,
-            table_name="doc_chunks",
-        )
-        self._index = VectorStoreIndex.from_vector_store(
-            vector_store=self._vector_store,
-            embed_model=self._embed_model,
-        )
 
     def _load_history(self, *, user_id: str, conversation_id: str) -> list[ChatMessage]:
         resp = (
@@ -66,15 +56,101 @@ class ChatService:
                 messages.append(ChatMessage(role=MessageRole.USER, content=content))
         return messages
 
+    @staticmethod
+    def _cosine_similarity(a: Sequence[float], b: Sequence[float]) -> float:
+        # Pure python cosine similarity (no heavy deps).
+        # Returns 0.0 for degenerate vectors.
+        if not a or not b or len(a) != len(b):
+            return 0.0
+        dot = 0.0
+        na = 0.0
+        nb = 0.0
+        for x, y in zip(a, b, strict=False):
+            xf = float(x)
+            yf = float(y)
+            dot += xf * yf
+            na += xf * xf
+            nb += yf * yf
+        denom = math.sqrt(na) * math.sqrt(nb)
+        return dot / denom if denom > 0 else 0.0
+
+    @staticmethod
+    def _coerce_embedding(value: object) -> list[float] | None:
+        """
+        Supabase/PostgREST may return pgvector as:
+        - list[float] (ideal)
+        - string like "[0.1, 0.2, ...]" or "{...}" depending on adapter
+        """
+        if isinstance(value, list) and value and isinstance(value[0], (int, float)):
+            return [float(x) for x in value]
+        if isinstance(value, str):
+            s = value.strip()
+            if not s:
+                return None
+            # Common pgvector string form: "[0.1,0.2,...]"
+            if (s.startswith("[") and s.endswith("]")) or (s.startswith("{") and s.endswith("}")):
+                try:
+                    parsed = json.loads(s.replace("{", "[").replace("}", "]"))
+                    if isinstance(parsed, list) and parsed:
+                        return [float(x) for x in parsed]
+                except Exception:
+                    return None
+        return None
+
     def _retrieve(self, *, user_id: str, kb_ids: Sequence[str], query: str, top_k: int) -> list[NodeWithScore]:
-        filters = MetadataFilters(
-            filters=[
-                MetadataFilter(key="user_id", value=user_id),
-                MetadataFilter(key="kb_id", value=list(kb_ids), operator=FilterOperator.IN),
-            ]
-        )
-        retriever = self._index.as_retriever(similarity_top_k=top_k, filters=filters)
-        return list(retriever.retrieve(query))
+        # NOTE: We avoid llama-index SupabaseVectorStore here because its API changed
+        # to a `vecs` collection that requires a Postgres connection string.
+        # For this MVP, we query `doc_chunks` directly via Supabase and rank in Python.
+        if not kb_ids or not query.strip() or top_k <= 0:
+            return []
+
+        q_emb = self._embed_model.get_text_embedding(query)
+
+        # Prefer server-side pgvector similarity if RPC is installed.
+        try:
+            rpc = self._supabase.rpc(
+                "match_doc_chunks",
+                {
+                    "p_user_id": user_id,
+                    "p_kb_ids": list(kb_ids),
+                    "query_embedding": q_emb,
+                    "match_count": int(top_k),
+                },
+            ).execute()
+            rows = rpc.data or []
+        except Exception:
+            # Fallback: fetch a bounded candidate set and rank in Python.
+            candidate_limit = max(500, min(4000, top_k * 400))
+            resp = (
+                self._supabase.table("doc_chunks")
+                .select("id,kb_id,doc_id,chunk_index,content,metadata,embedding,created_at")
+                .eq("user_id", user_id)
+                .in_("kb_id", list(kb_ids))
+                .order("created_at", desc=True)
+                .limit(candidate_limit)
+                .execute()
+            )
+            rows = resp.data or []
+
+        scored: list[NodeWithScore] = []
+        for r in rows:
+            emb = self._coerce_embedding(r.get("embedding"))
+            if not emb:
+                continue
+
+            score = float(r.get("similarity") or 0.0) if "similarity" in r else self._cosine_similarity(q_emb, emb)
+            meta = r.get("metadata") if isinstance(r.get("metadata"), dict) else {}
+            # Ensure core IDs are present for traceability.
+            meta = {**meta, "user_id": user_id, "kb_id": r.get("kb_id"), "doc_id": r.get("doc_id")}
+            node = TextNode(
+                id_=str(r.get("id") or ""),
+                text=str(r.get("content") or ""),
+                metadata=meta,
+            )
+            scored.append(NodeWithScore(node=node, score=score))
+
+        scored.sort(key=lambda x: float(x.score or 0.0), reverse=True)
+        return scored[:top_k]
 
     def _format_context(self, nodes: Sequence[NodeWithScore]) -> str:
         if not nodes:
@@ -120,9 +196,7 @@ class ChatService:
 
     def stream_chat(self, req: ChatRequest) -> Iterator[bytes]:
         """
-        Yields Vercel AI SDK Data Stream Protocol parts:
-          - text: 0:"token"\n
-          - finish: d:{...}\n
+        Yields plain text stream chunks (AI SDK text stream protocol).
         """
         # Persist user message immediately
         self._persist_user_message(
@@ -161,8 +235,7 @@ class ChatService:
                 if not token:
                     continue
                 full_text_parts.append(token)
-                payload = f'0:{json.dumps(token, ensure_ascii=False)}\n'
-                yield payload.encode("utf-8")
+                yield token.encode("utf-8")
         finally:
             full = "".join(full_text_parts).strip()
             if full:
@@ -170,6 +243,5 @@ class ChatService:
                 self._persist_assistant_message(
                     user_id=req.user_id, conversation_id=req.conversation_id, content=full
                 )
-            finish = 'd:{"finishReason":"stop","usage":{"promptTokens":0,"completionTokens":0}}\n'
-            yield finish.encode("utf-8")
+            # No special finish marker for text stream protocol.
 

@@ -34,9 +34,11 @@ export async function POST(req: Request) {
   }
 
   let title: string | null = "New conversation";
+  let kb_ids: string[] = [];
   try {
-    const body = (await req.json()) as { title?: string | null };
+    const body = (await req.json()) as { title?: string | null; kb_ids?: string[] | null };
     if (body && "title" in body) title = body.title ?? null;
+    if (body && Array.isArray(body.kb_ids)) kb_ids = body.kb_ids.map(String).filter(Boolean);
   } catch {
     // empty body is fine
   }
@@ -46,7 +48,7 @@ export async function POST(req: Request) {
     .insert({
       user_id: user.id,
       title,
-      kb_ids: [],
+      kb_ids,
     })
     .select("id,title,updated_at,created_at,kb_ids")
     .single();

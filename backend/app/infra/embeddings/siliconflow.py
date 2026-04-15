@@ -11,7 +11,12 @@ def get_siliconflow_embedding_model(settings: Settings) -> OpenAIEmbedding:
     We MUST use OpenAIEmbedding (no local models).
     """
     return OpenAIEmbedding(
-        model=settings.siliconflow_embedding_model,
+        # llama-index validates `model` against OpenAIEmbeddingModelType, which does
+        # not include SiliconFlow model ids like "BAAI/bge-m3". We pass a valid
+        # OpenAI embedding model to satisfy validation, then override the actual
+        # engine name via `model_name`, which OpenAIEmbedding uses for requests.
+        model="text-embedding-3-small",
+        model_name=settings.siliconflow_embedding_model,
         api_key=settings.siliconflow_api_key,
         api_base=settings.siliconflow_api_base,
     )

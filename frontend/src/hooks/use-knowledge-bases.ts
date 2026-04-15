@@ -63,3 +63,24 @@ export function useDeleteKB() {
   });
 }
 
+export function useUpdateKB() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { kbId: string; name?: string; description?: string | null }) => {
+      const res = await fetch(`/api/knowledge-bases/${input.kbId}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          ...(input.name !== undefined ? { name: input.name } : {}),
+          ...(input.description !== undefined ? { description: input.description } : {}),
+        }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? (await res.text()));
+      return (await res.json()) as KnowledgeBase;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: kbQueryKey });
+    },
+  });
+}
+

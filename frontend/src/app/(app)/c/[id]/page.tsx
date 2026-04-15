@@ -35,7 +35,20 @@ export default async function ConversationPage(props: {
     content: String(m.content ?? ""),
   }));
 
-  const initialKbIds = sp.kb_ids?.trim() ? sp.kb_ids.split(",").map((x) => x.trim()).filter(Boolean) : undefined;
+  const kbIdsFromQuery = sp.kb_ids?.trim() ? sp.kb_ids.split(",").map((x) => x.trim()).filter(Boolean) : null;
+  const { data: convoRow } = await supabase
+    .from("conversations")
+    .select("kb_ids")
+    .eq("id", id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  const initialKbIds =
+    kbIdsFromQuery && kbIdsFromQuery.length
+      ? kbIdsFromQuery
+      : Array.isArray(convoRow?.kb_ids)
+        ? convoRow!.kb_ids.map(String).filter(Boolean)
+        : undefined;
   const prompt = sp.prompt?.trim() ? sp.prompt : null;
 
   return (

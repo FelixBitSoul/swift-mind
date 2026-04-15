@@ -7,6 +7,33 @@ async function getAccessToken(): Promise<string | null> {
   return sessionData.session?.access_token ?? null;
 }
 
+export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const accessToken = await getAccessToken();
+  if (!accessToken) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { "content-type": "application/json" },
+    });
+  }
+
+  const { id } = await ctx.params;
+  const body = await req.text();
+
+  const upstream = await fetch(`${env.backendBaseUrl}/api/kb/${id}`, {
+    method: "PATCH",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${accessToken}`,
+    },
+    body,
+  });
+
+  return new Response(await upstream.text(), {
+    status: upstream.status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
 export async function DELETE(_: Request, ctx: { params: Promise<{ id: string }> }) {
   const accessToken = await getAccessToken();
   if (!accessToken) {

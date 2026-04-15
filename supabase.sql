@@ -87,6 +87,46 @@ on public.doc_chunks using ivfflat (embedding vector_cosine_ops)
 with (lists = 100);
 
 -- -----------------------------
+-- Vector search RPC (optional but recommended)
+-- -----------------------------
+-- Fast similarity search with multi-tenant + kb filters.
+-- Note: returns `similarity` as (1 - cosine_distance), higher is better.
+create or replace function public.match_doc_chunks(
+  query_embedding vector(1024),
+  match_count int,
+  p_user_id uuid,
+  p_kb_ids uuid[]
+)
+returns table (
+  id uuid,
+  kb_id uuid,
+  doc_id uuid,
+  chunk_index int,
+  content text,
+  metadata jsonb,
+  similarity float
+)
+language sql
+stable
+as $$
+  select
+    dc.id,
+    dc.kb_id,
+    dc.doc_id,
+    dc.chunk_index,
+    dc.content,
+    dc.metadata,
+    1 - (dc.embedding <=> query_embedding) as similarity
+  from public.doc_chunks dc
+  where
+    dc.user_id = p_user_id
+    and (p_kb_ids is null or dc.kb_id = any(p_kb_ids))
+    and dc.embedding is not null
+  order by dc.embedding <=> query_embedding
+  limit greatest(match_count, 1);
+$$;
+
+-- -----------------------------
 -- conversations
 -- -----------------------------
 create table if not exists public.conversations (

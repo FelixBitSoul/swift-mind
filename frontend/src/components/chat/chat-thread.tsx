@@ -4,10 +4,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
+import { XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ChatSettingsPanel } from "@/components/chat/chat-settings-panel";
 import { useRagChat } from "@/hooks/use-rag-chat";
+import { useKBs } from "@/hooks/use-knowledge-bases";
 import { cn } from "@/lib/utils";
 
 function roleLabel(role: string) {
@@ -45,6 +47,15 @@ export function ChatThread(props: {
   const [kbIds, setKbIds] = useState<string[]>(props.initialKbIds ?? []);
   const [input, setInput] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const { data: kbs } = useKBs();
+
+  const selectedKbItems = useMemo(() => {
+    const list = kbs ?? [];
+    if (!kbIds.length) return [];
+    if (!list.length) return kbIds.map((id) => ({ id, name: id }));
+    const byId = new Map(list.map((kb) => [kb.id, kb.name] as const));
+    return kbIds.map((id) => ({ id, name: byId.get(id) ?? id }));
+  }, [kbs, kbIds]);
 
   // Remount this hook when conversation changes to ensure history resets.
   const { messages, sendText, status } = useRagChat({
@@ -56,6 +67,21 @@ export function ChatThread(props: {
   const rendered = useMemo(() => messages, [messages]);
   const isLoading = status === "streaming" || status === "submitted";
   const hasAutoSentRef = useRef(false);
+  const lastPersistedKbIdsRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!props.conversationId || props.conversationId === "__draft__") return;
+    const key = kbIds.slice().sort().join(",");
+    if (lastPersistedKbIdsRef.current === key) return;
+    lastPersistedKbIdsRef.current = key;
+    void fetch(`/api/conversations/${encodeURIComponent(props.conversationId)}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ kb_ids: kbIds }),
+    }).catch(() => {
+      // best-effort; chat still works even if persistence fails
+    });
+  }, [kbIds, props.conversationId]);
 
   useEffect(() => {
     if (hasAutoSentRef.current) return;
@@ -75,7 +101,7 @@ export function ChatThread(props: {
     const res = await fetch("/api/conversations", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ title }),
+      body: JSON.stringify({ title, kb_ids: selectedKbIds }),
     });
     if (!res.ok) {
       const err = (await res.json().catch(() => null)) as { error?: string } | null;
@@ -101,8 +127,37 @@ export function ChatThread(props: {
           <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3">
             <div className="min-w-0">
               <div className="truncate text-sm font-medium">Chat</div>
-              <div className="truncate text-xs text-muted-foreground">
-                Selected KBs: {kbIds.length}
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                <span className="text-muted-foreground">KBs</span>
+                {selectedKbItems.length ? (
+                  <div className="flex min-w-0 flex-wrap gap-1.5">
+                    {selectedKbItems.map((kb) => (
+                      <span
+                        key={kb.id}
+                        className="inline-flex max-w-[18rem] items-center gap-1 rounded-md border bg-muted/30 px-2 py-0.5 font-medium text-foreground"
+                        title={kb.name}
+                      >
+                        <span className="min-w-0 truncate">{kb.name}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-xs"
+                          className="-mr-1"
+                          aria-label={`Remove ${kb.name}`}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setKbIds((prev) => prev.filter((x) => x !== kb.id));
+                          }}
+                        >
+                          <XIcon />
+                        </Button>
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="text-muted-foreground">Selected: {kbIds.length}</span>
+                )}
               </div>
             </div>
           </div>

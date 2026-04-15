@@ -39,6 +39,5 @@ def chat(body: ChatBody, user: CurrentUser = Depends(get_current_user)) -> Strea
     return StreamingResponse(
         gen,
         media_type="text/plain; charset=utf-8",
-        headers={"x-vercel-ai-data-stream": "v1"},
     )
 
