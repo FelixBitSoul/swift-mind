@@ -1,0 +1,28 @@
+---
+description: Keep documentation in sync with code changes
+alwaysApply: true
+---
+
+# Docs sync rules (docs-as-code)
+
+When you change code, **update docs as part of the same change set** when the change affects how someone uses, runs, or integrates with the system.
+
+## When docs MUST be updated
+
+- **API changes**: new/removed endpoints, request/response shape changes, auth/headers, error codes.
+- **Behavior changes**: defaults, ordering, side effects, data deletion semantics, polling/streaming behavior.
+- **Setup/runtime changes**: env vars, ports, local dev steps, required services, build/run commands.
+- **UI/UX changes**: new pages/flows, renamed navigation items, new constraints/limits that users will notice.
+
+## What to update (minimum)
+
+- **README / docs**: update the affected section(s) (install/run, usage, troubleshooting).
+- **Examples**: keep example requests/bodies in sync with actual handlers.
+- **Schema/SQL**: if DB schema or RLS invariants changed, update the relevant `.sql` / rules doc.
+
+## How to write the doc update
+
+- Be **specific and copy/paste-able**: include exact paths, commands, routes, and JSON bodies.
+- Prefer **small, local edits** near the relevant section over creating new docs.
+- If there is **no doc impact**, state that explicitly (e.g. “No user-facing/API changes”).
+

@@ -20,6 +20,20 @@ Run:
 uv run uvicorn backend.app.main:app --reload --port 8000
 ```
 
+### Backend API (selected)
+
+All endpoints require `Authorization: Bearer <Supabase JWT>`.
+
+- **Knowledge bases**
+  - `GET /api/kb`: list current user's KBs (ordered by `created_at desc`)
+  - `POST /api/kb`: create KB `{ "name": "...", "description": "..." }`
+  - `PATCH /api/kb/{id}`: update KB `{ "name"?: "...", "description"?: "..." }`
+  - `DELETE /api/kb/{id}`: delete KB + associated `documents` + `doc_chunks` (best-effort storage cleanup)
+  - `GET /api/kb/{id}/documents`: list documents under KB
+
+- **Documents**
+  - `DELETE /api/documents/{id}`: delete one document + its `doc_chunks` (best-effort storage cleanup)
+
 Env:
 
 - Copy `.env.example` to `.env` and fill:

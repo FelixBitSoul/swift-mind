@@ -6,6 +6,12 @@ alwaysApply: false
 
 # Frontend rules (Next.js + shadcn/ui + Supabase SSR + AI SDK)
 
+## Styling + components
+
+- Prefer **Tailwind CSS utility classes** for styling. Avoid custom CSS unless absolutely necessary.
+- Prefer reusing existing third-party UI primitives already in this repo (e.g. **shadcn/ui**, **Base UI**, **Radix**) over writing bespoke components.
+- When a shadcn/ui component exists for a pattern (Dialog, AlertDialog, DropdownMenu, Form, etc.), use it instead of custom implementations.
+
 ## UI vs hooks separation
 
 - UI components go in `src/components/**`.

@@ -9,6 +9,12 @@ cd frontend
 npm_config_registry=https://registry.npmmirror.com npm install
 ```
 
+Alternatively (recommended), keep a project-local `.npmrc`:
+
+```ini
+registry=https://registry.npmmirror.com
+```
+
 Env:
 
 ```bash
@@ -41,6 +47,27 @@ Open `http://localhost:3000`.
   - injects `Authorization: Bearer <Supabase access_token>`
   - proxies to the Python backend `/api/chat`
   - streams the response back using Vercel AI SDK Data Stream Protocol.
+
+## Knowledge bases UI
+
+- **List page**: `/knowledge-bases`
+  - Create KB (Dialog + Form)
+  - Delete KB (AlertDialog)
+- **Detail page**: `/knowledge-bases/:id`
+  - List documents (title / uploaded time / status)
+  - Delete document
+  - Auto-refresh while any document is `processing` (polling) + manual refresh
+
+## Route handlers (selected)
+
+These are Next.js Route Handlers that enforce Supabase session and/or proxy to the Python backend.
+
+- `GET/POST /api/knowledge-bases` → backend `GET/POST /api/kb`
+- `GET /api/knowledge-bases/:id/documents` → backend `GET /api/kb/:id/documents`
+- `DELETE /api/knowledge-bases/:id` → backend `DELETE /api/kb/:id`
+- `DELETE /api/documents/:id` → backend `DELETE /api/documents/:id`
+- `GET/POST /api/conversations`
+- `PATCH/DELETE /api/conversations/:id` (rename/delete in sidebar menu)
 
 ## Learn More
 
