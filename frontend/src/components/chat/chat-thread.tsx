@@ -4,10 +4,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
-import { XIcon } from "lucide-react";
+import { ArrowDownIcon, XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ChatSettingsPanel } from "@/components/chat/chat-settings-panel";
+import { MarkdownMessage } from "@/components/chat/markdown-message";
 import { useRagChat } from "@/hooks/use-rag-chat";
 import { useKBs } from "@/hooks/use-knowledge-bases";
 import { cn } from "@/lib/utils";
@@ -44,10 +45,15 @@ export function ChatThread(props: {
   draftId?: string | null;
 }) {
   const router = useRouter();
+  const containerClass = "mx-auto w-full px-4 md:max-w-3xl lg:max-w-[40rem] xl:max-w-[48rem]";
   const [kbIds, setKbIds] = useState<string[]>(props.initialKbIds ?? []);
   const [input, setInput] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const { data: kbs } = useKBs();
+  const isComposingRef = useRef(false);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const scrollRafRef = useRef<number | null>(null);
+  const [isPinnedToBottom, setIsPinnedToBottom] = useState(true);
 
   const selectedKbItems = useMemo(() => {
     const list = kbs ?? [];
@@ -95,6 +101,53 @@ export function ChatThread(props: {
 
   const showWelcome = rendered.length === 0;
 
+  function scrollToBottom(opts?: { behavior?: ScrollBehavior }) {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: opts?.behavior ?? "auto" });
+  }
+
+  function schedulePinnedScrollToBottom() {
+    if (!isPinnedToBottom) return;
+    if (scrollRafRef.current !== null) return;
+    scrollRafRef.current = window.requestAnimationFrame(() => {
+      scrollRafRef.current = null;
+      scrollToBottom();
+    });
+  }
+
+  function submitText(raw: string) {
+    const text = raw.trim();
+    if (!text || isLoading) return;
+
+    // Draft mode: only create conversation on first submit; do not write to DB before that.
+    if (props.conversationId === "__draft__") {
+      void createConversationFromDraft(text, kbIds).catch((err) => {
+        toast.error("Could not create conversation", {
+          description: err instanceof Error ? err.message : String(err),
+        });
+      });
+      return;
+    }
+
+    void sendText(text);
+    setInput("");
+  }
+
+  useEffect(() => {
+    schedulePinnedScrollToBottom();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rendered.length, status]);
+
+  useEffect(() => {
+    return () => {
+      if (scrollRafRef.current !== null) {
+        window.cancelAnimationFrame(scrollRafRef.current);
+        scrollRafRef.current = null;
+      }
+    };
+  }, []);
+
   async function createConversationFromDraft(firstText: string, selectedKbIds: string[]) {
     const titleBase = firstText.trim() || "New conversation";
     const title = titleBase.length > 60 ? `${titleBase.slice(0, 60)}…` : titleBase;
@@ -122,9 +175,9 @@ export function ChatThread(props: {
 
   return (
     <div className="flex h-[calc(100svh-1rem)] w-full">
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="border-b p-4">
-          <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3">
+      <div className="relative flex min-w-0 flex-1 flex-col">
+        <div className="border-b">
+          <div className={cn(containerClass, "flex items-center justify-between gap-3 py-4")}>
             <div className="min-w-0">
               <div className="truncate text-sm font-medium">Chat</div>
               <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
@@ -163,8 +216,18 @@ export function ChatThread(props: {
           </div>
         </div>
 
-        <div className="flex-1 overflow-auto p-4">
-          <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
+        <div
+          ref={scrollRef}
+          onScroll={() => {
+            const el = scrollRef.current;
+            if (!el) return;
+            const distance = el.scrollHeight - (el.scrollTop + el.clientHeight);
+            const nextPinned = distance < 80;
+            setIsPinnedToBottom(nextPinned);
+          }}
+          className="flex-1 overflow-auto"
+        >
+          <div className={cn(containerClass, "flex flex-col gap-4 py-4 pb-40")}>
             {showWelcome ? (
               <div className="rounded-xl border bg-muted/20 p-5">
                 <div className="text-sm font-medium">欢迎来到知识库对话</div>
@@ -192,17 +255,32 @@ export function ChatThread(props: {
             ) : null}
 
             {rendered.map((m) => (
-              <div
-                key={m.id}
-                className={cn(
-                  "rounded-lg border p-3",
-                  m.role === "user" ? "bg-muted/50" : "bg-background"
-                )}
-              >
-                <div className="mb-2 text-xs font-medium text-muted-foreground">
-                  {roleLabel(m.role)}
+              <div key={m.id} className="flex w-full justify-end">
+                <div className={cn("w-full", m.role === "user" && "max-w-[85%] sm:max-w-[75%]")}>
+                  <div
+                    className={cn(
+                      "mb-1 text-[11px] font-medium text-muted-foreground",
+                      m.role === "assistant" ? "text-left" : "text-right"
+                    )}
+                  >
+                    {roleLabel(m.role)}
+                  </div>
+                  <div
+                    className={cn(
+                      "rounded-2xl px-4 py-2.5",
+                      "break-words [overflow-wrap:anywhere]",
+                      m.role === "user"
+                        ? "ml-auto w-fit bg-primary text-primary-foreground"
+                        : "w-full border bg-muted/20 text-foreground text-left"
+                    )}
+                  >
+                    {m.role === "assistant" ? (
+                      <MarkdownMessage content={messageToText(m)} />
+                    ) : (
+                      <div className="whitespace-pre-wrap text-sm leading-6">{messageToText(m)}</div>
+                    )}
+                  </div>
                 </div>
-                <div className="whitespace-pre-wrap text-sm leading-6">{messageToText(m)}</div>
               </div>
             ))}
 
@@ -212,40 +290,73 @@ export function ChatThread(props: {
           </div>
         </div>
 
-        <div className="border-t p-4">
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              const text = input.trim();
-              if (!text || isLoading) return;
-              // Draft mode: only create conversation on first submit; do not write to DB before that.
-              if (props.conversationId === "__draft__") {
-                void createConversationFromDraft(text, kbIds).catch((err) => {
-                  toast.error("Could not create conversation", {
-                    description: err instanceof Error ? err.message : String(err),
-                  });
-                });
-                return;
-              }
-
-              void sendText(text);
-              setInput("");
-            }}
-            className="mx-auto flex w-full max-w-3xl flex-col gap-2"
-          >
-            <Textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask something…"
-              className="min-h-[96px] resize-none"
-            />
-            <div className="flex items-center justify-between">
-              <div className="text-xs text-muted-foreground">Streaming enabled</div>
-              <Button type="submit" disabled={isLoading || input.trim().length === 0}>
-                Send
+        {!isPinnedToBottom ? (
+          <div className="pointer-events-none absolute bottom-28 left-0 right-0 z-10">
+            <div className={cn(containerClass, "flex justify-center")}>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                aria-label="回到底部"
+                className={cn(
+                  "pointer-events-auto size-9 rounded-full",
+                  "bg-background/80 shadow-md shadow-black/10 backdrop-blur-xl",
+                  "supports-[backdrop-filter]:bg-background/70 dark:supports-[backdrop-filter]:bg-background/40"
+                )}
+                onClick={() => {
+                  setIsPinnedToBottom(true);
+                  scrollToBottom({ behavior: "smooth" });
+                }}
+              >
+                <ArrowDownIcon className="size-4" />
               </Button>
             </div>
-          </form>
+          </div>
+        ) : null}
+
+        <div className="pointer-events-none absolute bottom-4 left-0 right-0 z-10">
+          <div className={containerClass}>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                submitText(input);
+              }}
+              className="pointer-events-auto"
+            >
+              <div
+                className={cn(
+                  "rounded-2xl border border-border/60 bg-background/85 shadow-lg shadow-black/5 ring-1 ring-white/10 dark:bg-background/60",
+                  "backdrop-blur-xl",
+                  "supports-[backdrop-filter]:bg-background/80 dark:supports-[backdrop-filter]:bg-background/55"
+                )}
+              >
+                <Textarea
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder="Ask something…"
+                  onCompositionStart={() => {
+                    isComposingRef.current = true;
+                  }}
+                  onCompositionEnd={() => {
+                    isComposingRef.current = false;
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key !== "Enter") return;
+                    if (e.shiftKey) return;
+                    if (isComposingRef.current) return;
+                    if (isLoading) return;
+                    e.preventDefault();
+                    submitText(input);
+                  }}
+                  className={cn(
+                    "min-h-11 max-h-56 resize-none overflow-y-auto",
+                    "border-0 bg-transparent px-4 py-3",
+                    "focus-visible:ring-0 focus-visible:border-transparent"
+                  )}
+                />
+              </div>
+            </form>
+          </div>
         </div>
       </div>
 
