@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi import APIRouter, Depends, File, HTTPException, Path, UploadFile
 from pydantic import BaseModel, Field
 
 from ..core.auth import CurrentUser, get_current_user
 from ..core.config import get_settings
-from ..services.document_service import get_kb_documents
+from ..services.document_service import get_kb_documents, upload_kb_document_file
 from ..services.kb_service import create_kb, delete_kb, get_user_kbs, update_kb
 
 
@@ -44,6 +44,8 @@ class DocumentOut(BaseModel):
     title: str
     source: str | None = None
     mime_type: str | None = None
+    bucket: str | None = None
+    path: str | None = None
     status: str
     error: str | None = None
     created_at: str
@@ -51,6 +53,10 @@ class DocumentOut(BaseModel):
 
 
 class ListDocumentsResponse(BaseModel):
+    data: list[DocumentOut]
+
+
+class UploadDocumentsResponse(BaseModel):
     data: list[DocumentOut]
 
 
@@ -134,4 +140,34 @@ async def list_kb_documents(
         return ListDocumentsResponse(data=[DocumentOut(**r) for r in rows])
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@router.post("/api/kb/{id}/documents", response_model=UploadDocumentsResponse)
+async def upload_kb_documents(
+    id: str = Path(..., description="Knowledge base id"),
+    files: list[UploadFile] = File(..., description="One or more files to upload"),
+    user: CurrentUser = Depends(get_current_user),
+) -> UploadDocumentsResponse:
+    if not files:
+        raise HTTPException(status_code=422, detail="No files uploaded")
+    try:
+        settings = get_settings()
+        out_rows: list[dict] = []
+        for f in files:
+            raw = await f.read()
+            row = await upload_kb_document_file(
+                settings=settings,
+                user_id=user.user_id,
+                kb_id=id,
+                filename=f.filename or "upload.pdf",
+                content_type=f.content_type,
+                data=raw,
+            )
+            out_rows.append(row)
+        return UploadDocumentsResponse(data=[DocumentOut(**r) for r in out_rows])
+    except Exception as e:
+        msg = str(e)
+        if "not found" in msg.lower():
+            raise HTTPException(status_code=404, detail=msg) from e
+        raise HTTPException(status_code=400, detail=msg) from e
 

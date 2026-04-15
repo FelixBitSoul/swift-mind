@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.core.schema import Document as LlamaDocument
@@ -8,7 +9,7 @@ from llama_index.vector_stores.supabase import SupabaseVectorStore
 
 from ..core.config import Settings
 from ..infra.embeddings.siliconflow import get_siliconflow_embedding_model
-from ..infra.parsing.pymupdf_reader import PyMuPDFReader
+from ..infra.parsing.pymupdf_reader import ParsedDocument, PyMuPDFReader
 from ..infra.supabase.client import get_supabase_client
 
 
@@ -19,7 +20,7 @@ class IngestRequest:
     doc_id: str
     bucket: str
     path: str
-    filetype: str | None = None  # e.g. "pdf"
+    filetype: str | None = None  # "pdf" (PyMuPDF) or "md" / "markdown" (UTF-8 text)
 
 
 @dataclass(frozen=True)
@@ -40,6 +41,19 @@ class IngestionService:
             table_name="doc_chunks",
         )
 
+    def _parse_bytes(self, file_bytes: bytes, req: IngestRequest) -> ParsedDocument:
+        """Return ParsedDocument from pymupdf_reader (text + page_count)."""
+        suffix = Path(req.path).suffix.lower()
+        ft = (req.filetype or "").lower()
+        if suffix in (".md", ".markdown") or ft in ("md", "markdown"):
+            text = file_bytes.decode("utf-8", errors="replace").strip()
+            if not text:
+                raise RuntimeError("Parsed document is empty")
+            return ParsedDocument(text=text, page_count=1)
+
+        filetype = req.filetype or ("pdf" if suffix == ".pdf" else None)
+        return self._reader.load_bytes(file_bytes, filetype=filetype)
+
     def ingest(self, req: IngestRequest) -> IngestResult:
         # 1) download from Supabase Storage
         data = self._supabase.storage.from_(req.bucket).download(req.path)
@@ -47,8 +61,8 @@ class IngestionService:
             raise RuntimeError("Supabase storage download did not return bytes")
         file_bytes = bytes(data)
 
-        # 2) parse via PyMuPDFReader
-        parsed = self._reader.load_bytes(file_bytes, filetype=req.filetype)
+        # 2) parse (PDF via PyMuPDF; Markdown as UTF-8 text)
+        parsed = self._parse_bytes(file_bytes, req)
         if not parsed.text:
             raise RuntimeError("Parsed document is empty")
 

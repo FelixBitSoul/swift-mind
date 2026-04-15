@@ -1,10 +1,10 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
 import { toast } from "sonner"
-import { ArrowLeftIcon, RefreshCwIcon, TrashIcon } from "lucide-react"
+import { ArrowLeftIcon, RefreshCwIcon, TrashIcon, UploadIcon } from "lucide-react"
 
 import { Button, buttonVariants } from "@/components/ui/button"
 import {
@@ -27,7 +27,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { type KBDocument, useDeleteDocument, useKBDocuments } from "@/hooks/use-documents"
+import { type KBDocument, useDeleteDocument, useKBDocuments, useUploadKBDocuments } from "@/hooks/use-documents"
 import { cn } from "@/lib/utils"
 
 function statusLabel(status: string) {
@@ -44,6 +44,8 @@ export default function KnowledgeBaseDetailPage() {
 
   const docsQuery = useKBDocuments(kbId)
   const deleteDoc = useDeleteDocument({ kbId })
+  const uploadDocs = useUploadKBDocuments({ kbId })
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const [polling, setPolling] = useState(true)
 
@@ -66,6 +68,27 @@ export default function KnowledgeBaseDetailPage() {
     return [...docs].sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
   }, [docs])
 
+  async function onPickFiles(files: FileList | null) {
+    if (!files?.length) return
+    const allowed = (f: File) => {
+      const n = f.name.toLowerCase()
+      return n.endsWith(".pdf") || n.endsWith(".md") || n.endsWith(".markdown")
+    }
+    const picked = Array.from(files).filter(allowed)
+    if (!picked.length) {
+      toast.error("Only PDF and Markdown (.md, .markdown) files are supported")
+      return
+    }
+    try {
+      await uploadDocs.mutateAsync(picked)
+      toast.success(`Uploaded ${picked.length} file${picked.length === 1 ? "" : "s"}`)
+    } catch (e) {
+      toast.error("Upload failed", { description: e instanceof Error ? e.message : String(e) })
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = ""
+    }
+  }
+
   return (
     <div className="flex flex-1 flex-col gap-6 p-6">
       <div className="flex items-center justify-between gap-4">
@@ -84,6 +107,22 @@ export default function KnowledgeBaseDetailPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/pdf,.pdf,text/markdown,.md,.markdown"
+            multiple
+            className="hidden"
+            onChange={(e) => void onPickFiles(e.target.files)}
+          />
+          <Button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploadDocs.isPending}
+          >
+            <UploadIcon />
+            {uploadDocs.isPending ? "Uploading…" : "Upload files"}
+          </Button>
           <Button
             variant="outline"
             onClick={() => void docsQuery.refetch()}
@@ -112,7 +151,9 @@ export default function KnowledgeBaseDetailPage() {
         <Card>
           <CardHeader>
             <CardTitle>No documents</CardTitle>
-            <CardDescription>Upload and ingest documents to see them here.</CardDescription>
+            <CardDescription>
+              Upload PDF or Markdown (.md, .markdown) files to ingest them into this knowledge base.
+            </CardDescription>
           </CardHeader>
         </Card>
       ) : (

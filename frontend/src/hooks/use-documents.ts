@@ -8,6 +8,8 @@ export type KBDocument = {
   title: string
   source: string | null
   mime_type: string | null
+  bucket?: string | null
+  path?: string | null
   status: "uploaded" | "processing" | "ready" | "failed" | string
   error: string | null
   created_at: string
@@ -46,6 +48,27 @@ export function useDeleteDocument(opts?: { kbId?: string }) {
       if (opts?.kbId) {
         await queryClient.invalidateQueries({ queryKey: kbDocumentsQueryKey(opts.kbId) })
       }
+    },
+  })
+}
+
+export function useUploadKBDocuments(opts: { kbId: string }) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (files: File[]) => {
+      const form = new FormData()
+      for (const f of files) form.append("files", f)
+
+      const res = await fetch(`/api/knowledge-bases/${opts.kbId}/documents`, {
+        method: "POST",
+        body: form,
+      })
+      if (!res.ok)
+        throw new Error((await res.json().catch(() => null))?.error ?? (await res.text()))
+      return (await res.json()) as { data: KBDocument[] }
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: kbDocumentsQueryKey(opts.kbId) })
     },
   })
 }

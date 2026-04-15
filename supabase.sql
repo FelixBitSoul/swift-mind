@@ -42,11 +42,17 @@ create table if not exists public.documents (
   title text not null,
   source text, -- filename/url/etc
   mime_type text,
+  bucket text,
+  path text,
   status public.document_status not null default 'uploaded',
   error text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- If you created this table before bucket/path existed, run:
+-- alter table public.documents add column if not exists bucket text;
+-- alter table public.documents add column if not exists path text;
 
 create index if not exists documents_user_id_idx on public.documents (user_id);
 create index if not exists documents_kb_id_idx on public.documents (kb_id);
