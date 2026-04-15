@@ -1,4 +1,4 @@
-# SwiftMind
+# <img src="frontend/src/assets/swiftmind-logo.svg" alt="SwiftMind logo" width="24" height="24" style="vertical-align: -4px;" /> SwiftMind
 
 SwiftMind 是一个**个人全能知识助理**：把你的 PDF / Markdown 文档沉淀到知识库（Knowledge Base），然后基于你选择的知识库进行对话问答、总结与执行清单生成。
 
