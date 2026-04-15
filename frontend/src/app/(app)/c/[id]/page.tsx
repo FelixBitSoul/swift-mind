@@ -3,8 +3,12 @@ import { redirect } from "next/navigation";
 import { ChatThread } from "@/components/chat/chat-thread";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-export default async function ConversationPage(props: { params: Promise<{ id: string }> }) {
+export default async function ConversationPage(props: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ prompt?: string; kb_ids?: string }>;
+}) {
   const { id } = await props.params;
+  const sp = await props.searchParams;
 
   const supabase = await createSupabaseServerClient();
   const {
@@ -31,6 +35,17 @@ export default async function ConversationPage(props: { params: Promise<{ id: st
     content: String(m.content ?? ""),
   }));
 
-  return <ChatThread key={id} conversationId={id} initialMessages={initialMessages} />;
+  const initialKbIds = sp.kb_ids?.trim() ? sp.kb_ids.split(",").map((x) => x.trim()).filter(Boolean) : undefined;
+  const prompt = sp.prompt?.trim() ? sp.prompt : null;
+
+  return (
+    <ChatThread
+      key={id}
+      conversationId={id}
+      initialMessages={initialMessages}
+      initialKbIds={initialKbIds}
+      autoSendText={prompt}
+    />
+  );
 }
 

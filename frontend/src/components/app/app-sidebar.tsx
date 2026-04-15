@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/sidebar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ConversationSidebarItem } from "@/components/app/conversation-sidebar-item";
+import { DraftConversationSidebarItem, type DraftConversation } from "@/components/app/draft-conversation-sidebar-item";
 import { type Conversation, useConversations } from "@/hooks/use-conversations";
 
 export function AppSidebar() {
@@ -32,12 +33,25 @@ export function AppSidebar() {
   const [creating, setCreating] = useState(false);
   const [optimisticHref, setOptimisticHref] = useState<string | null>(null);
   const [isNavigating, startNavigating] = useTransition();
+  const [drafts, setDrafts] = useState<DraftConversation[]>([]);
 
   useEffect(() => {
     if (optimisticHref && pathname === optimisticHref) {
       setOptimisticHref(null);
     }
   }, [optimisticHref, pathname]);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const ce = e as CustomEvent<{ draftId?: string }>;
+      const draftId = ce.detail?.draftId;
+      if (!draftId) return;
+      setDrafts((prev) => prev.filter((d) => d.id !== draftId));
+      void queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    };
+    window.addEventListener("draft:converted", handler);
+    return () => window.removeEventListener("draft:converted", handler);
+  }, [queryClient]);
 
   const navigateConversation = useCallback(
     (href: string) => {
@@ -50,20 +64,17 @@ export function AppSidebar() {
   );
 
   const createConversation = useCallback(async () => {
+    // Draft UX: if user is already on a new/draft conversation page, keep it.
+    if (pathname.startsWith("/c/new")) return;
     setCreating(true);
     try {
-      const res = await fetch("/api/conversations", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ title: "New conversation" }),
-      });
-      if (!res.ok) {
-        const err = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(err?.error ?? (await res.text()));
-      }
-      const json = (await res.json()) as { data: { id: string } };
-      await queryClient.invalidateQueries({ queryKey: ["conversations"] });
-      router.push(`/c/${json.data.id}`);
+      const id =
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      const draft: DraftConversation = { id, title: "New conversation" };
+      setDrafts((prev) => [draft, ...prev]);
+      navigateConversation(`/c/new?draft=${encodeURIComponent(id)}`);
     } catch (e) {
       toast.error("Could not create conversation", {
         description: e instanceof Error ? e.message : String(e),
@@ -71,7 +82,7 @@ export function AppSidebar() {
     } finally {
       setCreating(false);
     }
-  }, [queryClient, router]);
+  }, [navigateConversation, pathname]);
 
   return (
     <Sidebar collapsible="icon" variant="sidebar">
@@ -101,15 +112,26 @@ export function AppSidebar() {
                     <SidebarMenuSkeleton showIcon />
                   </>
                 ) : (
-                  (data ?? []).map((c: Conversation) => (
-                    <ConversationSidebarItem
-                      key={c.id}
-                      conversation={c}
-                      optimisticHref={optimisticHref}
-                      onNavigate={navigateConversation}
-                      navigating={isNavigating}
-                    />
-                  ))
+                  <>
+                    {drafts.map((d) => (
+                      <DraftConversationSidebarItem
+                        key={`draft-${d.id}`}
+                        draft={d}
+                        optimisticHref={optimisticHref}
+                        onNavigate={navigateConversation}
+                        navigating={isNavigating}
+                      />
+                    ))}
+                    {(data ?? []).map((c: Conversation) => (
+                      <ConversationSidebarItem
+                        key={c.id}
+                        conversation={c}
+                        optimisticHref={optimisticHref}
+                        onNavigate={navigateConversation}
+                        navigating={isNavigating}
+                      />
+                    ))}
+                  </>
                 )}
               </SidebarMenu>
             </ScrollArea>
