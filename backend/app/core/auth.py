@@ -5,8 +5,8 @@ from dataclasses import dataclass
 from fastapi import Depends, HTTPException, Request
 from supabase import Client
 
-from .config import get_settings
 from ..infra.supabase.client import get_supabase_client
+from .config import get_settings
 
 
 @dataclass(frozen=True)

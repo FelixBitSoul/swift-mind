@@ -8,7 +8,6 @@ from ..core.config import get_settings
 from ..services.document_service import get_kb_documents, upload_kb_document_file
 from ..services.kb_service import create_kb, delete_kb, get_user_kbs, update_kb
 
-
 router = APIRouter()
 
 
@@ -82,7 +81,11 @@ async def post_kb(
 async def list_kbs(user: CurrentUser = Depends(get_current_user)) -> ListKnowledgeBasesResponse:
     try:
         settings = get_settings()
-        rows = await get_user_kbs(settings=settings, user_id=user.user_id, order_by_created_at_desc=True)
+        rows = await get_user_kbs(
+            settings=settings,
+            user_id=user.user_id,
+            order_by_created_at_desc=True,
+        )
         return ListKnowledgeBasesResponse(data=[KnowledgeBaseOut(**r) for r in rows])
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e)) from e

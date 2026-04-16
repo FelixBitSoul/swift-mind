@@ -13,7 +13,9 @@ def _supabase(settings: Settings) -> Client:
     return get_supabase_client(settings)
 
 
-async def create_kb(*, settings: Settings, user_id: str, name: str, description: str | None) -> dict:
+async def create_kb(
+    *, settings: Settings, user_id: str, name: str, description: str | None
+) -> dict:
     supabase = _supabase(settings)
 
     def _run() -> dict:
@@ -91,7 +93,11 @@ async def delete_kb(*, settings: Settings, user_id: str, kb_id: str) -> None:
     def _run() -> None:
         # 1) fetch documents first (to discover possible storage object paths)
         docs_resp = (
-            supabase.table("documents").select("*").eq("kb_id", kb_id).eq("user_id", user_id).execute()
+            supabase.table("documents")
+            .select("*")
+            .eq("kb_id", kb_id)
+            .eq("user_id", user_id)
+            .execute()
         )
         docs = docs_resp.data or []
 

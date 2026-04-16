@@ -5,8 +5,7 @@ from pydantic import BaseModel, Field
 
 from ..core.auth import CurrentUser, get_current_user
 from ..core.config import get_settings
-from ..services.ingestion_service import IngestRequest, IngestionService
-
+from ..services.ingestion_service import IngestionService, IngestRequest
 
 router = APIRouter()
 
