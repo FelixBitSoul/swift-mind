@@ -1,8 +1,8 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport } from "ai";
 import type { UIMessage } from "ai";
+import { RagDataStreamChatTransport } from "@/lib/ai/rag-data-stream-chat-transport";
 
 export type RagChatConfig = {
   conversationId: string;
@@ -12,7 +12,7 @@ export type RagChatConfig = {
 
 export function useRagChat(config: RagChatConfig) {
   const chat = useChat({
-    transport: new DefaultChatTransport({
+    transport: new RagDataStreamChatTransport({
       api: "/api/chat",
       body: {
         conversation_id: config.conversationId,
