@@ -10,7 +10,6 @@ from ..core.auth import CurrentUser, get_current_user
 from ..core.config import get_settings
 from ..services.chat_service import ChatRequest, ChatService
 
-
 router = APIRouter()
 
 
