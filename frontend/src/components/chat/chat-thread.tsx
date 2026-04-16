@@ -13,6 +13,36 @@ import { useRagChat } from "@/hooks/use-rag-chat";
 import { useKBs } from "@/hooks/use-knowledge-bases";
 import { cn } from "@/lib/utils";
 
+type Citation = {
+  kb_id: string;
+  doc_id: string;
+  chunk_id: string;
+  chunk_index?: number;
+  title?: string;
+  source?: string;
+  score?: number;
+  snippet: string;
+};
+
+function getCitations(message: unknown): Citation[] {
+  if (typeof message !== "object" || message === null) return [];
+  const meta = (message as Record<string, unknown>).metadata;
+  if (typeof meta !== "object" || meta === null) return [];
+  const citations = (meta as Record<string, unknown>).citations;
+  if (!Array.isArray(citations)) return [];
+  return citations.filter((c): c is Citation => typeof c === "object" && c !== null) as Citation[];
+}
+
+function citationDeepLink(c: Citation, idx?: number) {
+  const qp = new URLSearchParams();
+  qp.set("chunk_id", c.chunk_id);
+  if (typeof c.chunk_index === "number" && Number.isFinite(c.chunk_index)) {
+    qp.set("chunk_index", String(c.chunk_index));
+  }
+  if (typeof idx === "number") qp.set("cite", String(idx + 1));
+  return `/knowledge-bases/${encodeURIComponent(c.kb_id)}/documents/${encodeURIComponent(c.doc_id)}?${qp.toString()}`;
+}
+
 function roleLabel(role: string) {
   if (role === "user") return "You";
   if (role === "assistant") return "AI";
@@ -39,7 +69,7 @@ function messageToText(message: unknown): string {
 
 export function ChatThread(props: {
   conversationId: string;
-  initialMessages: { id: string; role: "system" | "user" | "assistant"; content: string }[];
+  initialMessages: { id: string; role: "system" | "user" | "assistant"; content: string; metadata?: unknown }[];
   initialKbIds?: string[];
   autoSendText?: string | null;
   draftId?: string | null;
@@ -275,7 +305,79 @@ export function ChatThread(props: {
                     )}
                   >
                     {m.role === "assistant" ? (
-                      <MarkdownMessage content={messageToText(m)} />
+                      <div className="flex flex-col gap-3">
+                        <MarkdownMessage content={messageToText(m)} />
+                        {(() => {
+                          const citations = getCitations(m);
+                          if (!citations.length) return null;
+                          return (
+                            <div className="rounded-xl border bg-background/60 p-3">
+                              <div className="text-xs font-medium text-muted-foreground">引用来源</div>
+                              <div className="mt-2 flex flex-col gap-2">
+                                {citations.map((c, idx) => {
+                                  const title = c.title ?? c.source ?? c.doc_id;
+                                  const score =
+                                    typeof c.score === "number" && Number.isFinite(c.score)
+                                      ? c.score.toFixed(2)
+                                      : null;
+                                  return (
+                                    <button
+                                      key={`${c.doc_id}:${c.chunk_id}:${idx}`}
+                                      type="button"
+                                      className={cn(
+                                        "w-full rounded-lg border bg-muted/10 px-3 py-2 text-left",
+                                        "hover:bg-muted/20"
+                                      )}
+                                      onClick={() => {
+                                        window.open(citationDeepLink(c, idx), "_blank");
+                                      }}
+                                    >
+                                      <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                          <div className="truncate text-xs font-medium">
+                                            <span className="mr-2 text-muted-foreground">[{idx + 1}]</span>
+                                            {title}
+                                          </div>
+                                          <div className="mt-1 line-clamp-3 text-xs text-muted-foreground">
+                                            {c.snippet}
+                                          </div>
+                                        </div>
+                                        {score ? (
+                                          <div className="shrink-0 rounded-md border bg-background px-2 py-1 text-[11px] text-muted-foreground">
+                                            {score}
+                                          </div>
+                                        ) : null}
+                                      </div>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+
+                              <div className="mt-3 border-t pt-3">
+                                <div className="text-xs font-medium text-muted-foreground">参考</div>
+                                <ol className="mt-2 list-decimal space-y-1 pl-5 text-xs text-muted-foreground">
+                                  {citations.map((c, idx) => {
+                                    const title = c.title ?? c.source ?? c.doc_id;
+                                    const href = citationDeepLink(c, idx);
+                                    return (
+                                      <li key={`ref:${c.doc_id}:${c.chunk_id}:${idx}`}>
+                                        <a
+                                          href={href}
+                                          target="_blank"
+                                          rel="noreferrer noopener"
+                                          className="underline decoration-muted-foreground/50 underline-offset-4 hover:decoration-foreground"
+                                        >
+                                          {title}
+                                        </a>
+                                      </li>
+                                    );
+                                  })}
+                                </ol>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
                     ) : (
                       <div className="whitespace-pre-wrap text-sm leading-6">{messageToText(m)}</div>
                     )}

@@ -5,15 +5,16 @@ import math
 from dataclasses import dataclass
 from typing import Iterator, Sequence
 
-from llama_index.core.schema import NodeWithScore
 from llama_index.core.base.llms.types import ChatMessage, MessageRole
-from llama_index.core.schema import TextNode
+from llama_index.core.schema import NodeWithScore, TextNode
 from llama_index.core.vector_stores.utils import node_to_metadata_dict
 
 from ..core.config import Settings
 from ..infra.embeddings.siliconflow import get_siliconflow_embedding_model
 from ..infra.llms.deepseek import get_deepseek_llm
 from ..infra.supabase.client import get_supabase_client
+from ..utils.data_stream import ds_finish, ds_text
+from .citations import build_citations
 
 
 @dataclass(frozen=True)
@@ -97,7 +98,9 @@ class ChatService:
                     return None
         return None
 
-    def _retrieve(self, *, user_id: str, kb_ids: Sequence[str], query: str, top_k: int) -> list[NodeWithScore]:
+    def _retrieve(
+        self, *, user_id: str, kb_ids: Sequence[str], query: str, top_k: int
+    ) -> list[NodeWithScore]:
         # NOTE: We avoid llama-index SupabaseVectorStore here because its API changed
         # to a `vecs` collection that requires a Postgres connection string.
         # For this MVP, we query `doc_chunks` directly via Supabase and rank in Python.
@@ -138,7 +141,11 @@ class ChatService:
             if not emb:
                 continue
 
-            score = float(r.get("similarity") or 0.0) if "similarity" in r else self._cosine_similarity(q_emb, emb)
+            score = (
+                float(r.get("similarity") or 0.0)
+                if "similarity" in r
+                else self._cosine_similarity(q_emb, emb)
+            )
             meta = r.get("metadata") if isinstance(r.get("metadata"), dict) else {}
             # Ensure core IDs are present for traceability.
             meta = {**meta, "user_id": user_id, "kb_id": r.get("kb_id"), "doc_id": r.get("doc_id")}
@@ -180,23 +187,60 @@ class ChatService:
             .execute()
         )
 
-    def _persist_assistant_message(self, *, user_id: str, conversation_id: str, content: str) -> None:
-        (
-            self._supabase.table("messages")
-            .insert(
-                {
-                    "conversation_id": conversation_id,
-                    "user_id": user_id,
-                    "role": "assistant",
-                    "content": content,
-                }
-            )
+    def _persist_assistant_message(
+        self,
+        *,
+        user_id: str,
+        conversation_id: str,
+        content: str,
+        metadata: dict | None = None,
+    ) -> None:
+        row: dict = {
+            "conversation_id": conversation_id,
+            "user_id": user_id,
+            "role": "assistant",
+            "content": content,
+        }
+        if metadata is not None:
+            row["metadata"] = metadata
+
+        try:
+            self._supabase.table("messages").insert(row).execute()
+        except Exception:
+            # Backward-compatible fallback if DB schema hasn't added `metadata` yet.
+            row.pop("metadata", None)
+            self._supabase.table("messages").insert(row).execute()
+
+    def _load_doc_meta(self, *, user_id: str, doc_ids: Sequence[str]) -> dict[str, dict[str, str]]:
+        uniq = [d for d in dict.fromkeys([x for x in doc_ids if x])]
+        if not uniq:
+            return {}
+        resp = (
+            self._supabase.table("documents")
+            .select("id,title,source")
+            .eq("user_id", user_id)
+            .in_("id", uniq)
             .execute()
         )
+        rows = resp.data or []
+        out: dict[str, dict[str, str]] = {}
+        for r in rows:
+            did = str(r.get("id") or "")
+            if not did:
+                continue
+            title = r.get("title")
+            source = r.get("source")
+            meta: dict[str, str] = {}
+            if isinstance(title, str) and title:
+                meta["title"] = title
+            if isinstance(source, str) and source:
+                meta["source"] = source
+            out[did] = meta
+        return out
 
     def stream_chat(self, req: ChatRequest) -> Iterator[bytes]:
         """
-        Yields plain text stream chunks (AI SDK text stream protocol).
+        Yields AI SDK Data Stream Protocol parts.
         """
         # Persist user message immediately
         self._persist_user_message(
@@ -208,10 +252,15 @@ class ChatService:
             user_id=req.user_id, kb_ids=req.kb_ids, query=req.message, top_k=req.top_k
         )
         context = self._format_context(nodes)
+        doc_ids = [str((nws.node.metadata or {}).get("doc_id") or "") for nws in nodes]
+        doc_meta_by_id = self._load_doc_meta(user_id=req.user_id, doc_ids=doc_ids)
+        citations = build_citations(nodes, doc_meta_by_id=doc_meta_by_id)
 
         system = (
             "You are a helpful RAG assistant.\n"
             "Use the provided CONTEXT to answer. If the context is insufficient, say so.\n"
+            "When you use information from the CONTEXT, cite it with footnote markers like [1].\n"
+            "that refer to the numbered context items.\n"
         )
         if context:
             system += f"\nCONTEXT:\n{context}\n"
@@ -221,6 +270,7 @@ class ChatService:
         messages.append(ChatMessage(role=MessageRole.USER, content=req.message))
 
         full_text_parts: list[str] = []
+        sent_finish = False
         try:
             stream = self._llm.stream_chat(messages)
             for event in stream:
@@ -235,13 +285,20 @@ class ChatService:
                 if not token:
                     continue
                 full_text_parts.append(token)
-                yield token.encode("utf-8")
+                yield ds_text(token)
+            yield ds_finish({"citations": citations})
+            sent_finish = True
         finally:
             full = "".join(full_text_parts).strip()
             if full:
                 # Persist assistant message only once at end
                 self._persist_assistant_message(
-                    user_id=req.user_id, conversation_id=req.conversation_id, content=full
+                    user_id=req.user_id,
+                    conversation_id=req.conversation_id,
+                    content=full,
+                    metadata={"citations": citations},
                 )
-            # No special finish marker for text stream protocol.
+            if not sent_finish:
+                # Best-effort finish marker so the client can finalize state.
+                yield ds_finish({"citations": citations})
 

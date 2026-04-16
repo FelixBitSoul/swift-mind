@@ -158,8 +158,12 @@ create table if not exists public.messages (
   user_id uuid not null,
   role public.message_role not null,
   content text not null,
+  metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
 );
+
+-- If you created this table before metadata existed, run:
+-- alter table public.messages add column if not exists metadata jsonb not null default '{}'::jsonb;
 
 create index if not exists messages_conversation_id_idx on public.messages (conversation_id);
 create index if not exists messages_user_id_idx on public.messages (user_id);

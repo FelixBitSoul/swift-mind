@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import mimetypes
 import uuid
-from typing import Any
 
 import anyio
 from supabase import Client
 
 from ..core.config import Settings
 from ..infra.supabase.client import get_supabase_client
-from .ingestion_service import IngestRequest, IngestionService
+from .ingestion_service import IngestionService, IngestRequest
 
 
 def _supabase(settings: Settings) -> Client:
@@ -39,7 +38,13 @@ async def _assert_kb_owned(*, settings: Settings, user_id: str, kb_id: str) -> N
     supabase = _supabase(settings)
 
     def _run() -> None:
-        resp = supabase.table("knowledge_bases").select("id").eq("id", kb_id).eq("user_id", user_id).execute()
+        resp = (
+            supabase.table("knowledge_bases")
+            .select("id")
+            .eq("id", kb_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
         rows = resp.data or []
         if not rows:
             raise RuntimeError("Knowledge base not found")
@@ -209,4 +214,38 @@ async def delete_document(*, settings: Settings, user_id: str, doc_id: str) -> N
         supabase.table("documents").delete().eq("id", doc_id).eq("user_id", user_id).execute()
 
     await anyio.to_thread.run_sync(_run)
+
+
+async def get_document_detail(
+    *, settings: Settings, user_id: str, doc_id: str, chunk_limit: int = 2000
+) -> dict:
+    supabase = _supabase(settings)
+
+    def _run() -> dict:
+        doc_resp = (
+            supabase.table("documents")
+            .select("id,kb_id,title,source,mime_type,bucket,path,status,error,created_at,updated_at")
+            .eq("id", doc_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
+        doc_rows = doc_resp.data or []
+        if not doc_rows:
+            raise RuntimeError("Document not found")
+        doc = dict(doc_rows[0]) if isinstance(doc_rows[0], dict) else {}
+
+        chunks_resp = (
+            supabase.table("doc_chunks")
+            .select("id,kb_id,doc_id,chunk_index,content,metadata,created_at")
+            .eq("doc_id", doc_id)
+            .eq("user_id", user_id)
+            .order("chunk_index", desc=False)
+            .limit(int(chunk_limit))
+            .execute()
+        )
+        chunks = [dict(r) for r in (chunks_resp.data or [])]
+
+        return {"document": doc, "chunks": chunks}
+
+    return await anyio.to_thread.run_sync(_run)
 
