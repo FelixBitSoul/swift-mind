@@ -251,6 +251,8 @@ class ChatService:
         system = (
             "You are a helpful RAG assistant.\n"
             "Use the provided CONTEXT to answer. If the context is insufficient, say so.\n"
+            "When you use information from the CONTEXT, cite it with footnote markers like [1].\n"
+            "that refer to the numbered context items.\n"
         )
         if context:
             system += f"\nCONTEXT:\n{context}\n"

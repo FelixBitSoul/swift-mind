@@ -33,6 +33,16 @@ function getCitations(message: unknown): Citation[] {
   return citations.filter((c): c is Citation => typeof c === "object" && c !== null) as Citation[];
 }
 
+function citationDeepLink(c: Citation, idx?: number) {
+  const qp = new URLSearchParams();
+  qp.set("chunk_id", c.chunk_id);
+  if (typeof c.chunk_index === "number" && Number.isFinite(c.chunk_index)) {
+    qp.set("chunk_index", String(c.chunk_index));
+  }
+  if (typeof idx === "number") qp.set("cite", String(idx + 1));
+  return `/knowledge-bases/${encodeURIComponent(c.kb_id)}/documents/${encodeURIComponent(c.doc_id)}?${qp.toString()}`;
+}
+
 function roleLabel(role: string) {
   if (role === "user") return "You";
   if (role === "assistant") return "AI";
@@ -319,13 +329,15 @@ export function ChatThread(props: {
                                         "hover:bg-muted/20"
                                       )}
                                       onClick={() => {
-                                        // Best-effort: open the KB page; future enhancement can deep-link to doc/chunk.
-                                        window.open(`/knowledge-bases/${encodeURIComponent(c.kb_id)}`, "_blank");
+                                        window.open(citationDeepLink(c, idx), "_blank");
                                       }}
                                     >
                                       <div className="flex items-start justify-between gap-3">
                                         <div className="min-w-0">
-                                          <div className="truncate text-xs font-medium">{title}</div>
+                                          <div className="truncate text-xs font-medium">
+                                            <span className="mr-2 text-muted-foreground">[{idx + 1}]</span>
+                                            {title}
+                                          </div>
                                           <div className="mt-1 line-clamp-3 text-xs text-muted-foreground">
                                             {c.snippet}
                                           </div>
@@ -339,6 +351,28 @@ export function ChatThread(props: {
                                     </button>
                                   );
                                 })}
+                              </div>
+
+                              <div className="mt-3 border-t pt-3">
+                                <div className="text-xs font-medium text-muted-foreground">参考</div>
+                                <ol className="mt-2 list-decimal space-y-1 pl-5 text-xs text-muted-foreground">
+                                  {citations.map((c, idx) => {
+                                    const title = c.title ?? c.source ?? c.doc_id;
+                                    const href = citationDeepLink(c, idx);
+                                    return (
+                                      <li key={`ref:${c.doc_id}:${c.chunk_id}:${idx}`}>
+                                        <a
+                                          href={href}
+                                          target="_blank"
+                                          rel="noreferrer noopener"
+                                          className="underline decoration-muted-foreground/50 underline-offset-4 hover:decoration-foreground"
+                                        >
+                                          {title}
+                                        </a>
+                                      </li>
+                                    );
+                                  })}
+                                </ol>
                               </div>
                             </div>
                           );

@@ -684,6 +684,17 @@ export default function KnowledgeBaseDetailPage() {
           <div className="space-y-3 px-4 pb-4 text-sm">
             {selectedDoc ? (
               <>
+                <div className="flex gap-2">
+                  <Link
+                    className={buttonVariants({ variant: "outline", size: "sm" })}
+                    href={`/knowledge-bases/${encodeURIComponent(kbId)}/documents/${encodeURIComponent(selectedDoc.id)}`}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                  >
+                    Open details
+                  </Link>
+                </div>
+
                 <div className="space-y-1">
                   <div className="text-xs font-medium text-muted-foreground">Name</div>
                   <div className="break-words">{selectedDoc.title}</div>
