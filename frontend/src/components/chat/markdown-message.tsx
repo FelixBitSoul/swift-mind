@@ -27,7 +27,21 @@ const schema: Schema = {
   },
 };
 
+function emphasizeFootnoteMarkers(markdown: string): string {
+  // Make markers like [1] more visible, without touching fenced code blocks.
+  // We keep it simple and only protect triple-backtick fences.
+  const parts = markdown.split(/(```[\s\S]*?```)/g);
+  return parts
+    .map((part) => {
+      if (part.startsWith("```")) return part;
+      // Replace [n] with bolded marker. This stays valid markdown and survives sanitization.
+      return part.replace(/\[(\d{1,3})\]/g, "**[$1]**");
+    })
+    .join("");
+}
+
 export function MarkdownMessage(props: { content: string }) {
+  const content = emphasizeFootnoteMarkers(props.content);
   return (
     <div className="text-sm leading-6 text-foreground">
       <ReactMarkdown
@@ -80,7 +94,7 @@ export function MarkdownMessage(props: { content: string }) {
           pre: ({ children }) => <pre className="mt-2 overflow-x-auto rounded-md">{children}</pre>,
         }}
       >
-        {props.content}
+        {content}
       </ReactMarkdown>
     </div>
   );
