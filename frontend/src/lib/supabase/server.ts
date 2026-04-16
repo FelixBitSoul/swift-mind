@@ -5,6 +5,12 @@ import { createServerClient } from "@supabase/ssr";
 import { env } from "@/lib/env";
 
 export async function createSupabaseServerClient() {
+  if (!env.supabaseUrl || !env.supabaseAnonKey) {
+    throw new Error(
+      "Supabase env missing: NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY"
+    );
+  }
+
   const cookieStore = await cookies();
 
   return createServerClient(env.supabaseUrl, env.supabaseAnonKey, {

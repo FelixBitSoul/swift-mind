@@ -2,6 +2,8 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
+import { readErrorMessage } from "@/lib/http"
+
 export type KBDocument = {
   id: string
   kb_id: string
@@ -27,8 +29,7 @@ export function useKBDocuments(kbId: string) {
     queryKey: kbDocumentsQueryKey(kbId),
     queryFn: async (): Promise<KBDocument[]> => {
       const res = await fetch(`/api/knowledge-bases/${kbId}/documents`, { method: "GET" })
-      if (!res.ok)
-        throw new Error((await res.json().catch(() => null))?.error ?? (await res.text()))
+      if (!res.ok) throw new Error(await readErrorMessage(res))
       const json = (await res.json()) as ListDocumentsResponse
       return json.data
     },
@@ -40,8 +41,7 @@ export function useDeleteDocument(opts?: { kbId?: string }) {
   return useMutation({
     mutationFn: async (docId: string) => {
       const res = await fetch(`/api/documents/${docId}`, { method: "DELETE" })
-      if (!res.ok)
-        throw new Error((await res.json().catch(() => null))?.error ?? (await res.text()))
+      if (!res.ok) throw new Error(await readErrorMessage(res))
       return (await res.json()) as { ok: boolean }
     },
     onSuccess: async () => {
@@ -63,8 +63,7 @@ export function useUploadKBDocuments(opts: { kbId: string }) {
         method: "POST",
         body: form,
       })
-      if (!res.ok)
-        throw new Error((await res.json().catch(() => null))?.error ?? (await res.text()))
+      if (!res.ok) throw new Error(await readErrorMessage(res))
       return (await res.json()) as { data: KBDocument[] }
     },
     onSuccess: async () => {

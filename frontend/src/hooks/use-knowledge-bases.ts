@@ -2,6 +2,8 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { readErrorMessage } from "@/lib/http";
+
 export type KnowledgeBase = {
   id: string;
   name: string;
@@ -14,7 +16,7 @@ type KnowledgeBasesListResponse = { data: KnowledgeBase[] };
 
 async function fetchKnowledgeBases(): Promise<KnowledgeBase[]> {
   const res = await fetch("/api/knowledge-bases", { method: "GET" });
-  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? (await res.text()));
+  if (!res.ok) throw new Error(await readErrorMessage(res));
   const json = (await res.json()) as KnowledgeBasesListResponse;
   return json.data;
 }
@@ -40,7 +42,7 @@ export function useCreateKB() {
           description: input.description ?? null,
         }),
       });
-      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? (await res.text()));
+      if (!res.ok) throw new Error(await readErrorMessage(res));
       return (await res.json()) as KnowledgeBase;
     },
     onSuccess: async () => {
@@ -54,7 +56,7 @@ export function useDeleteKB() {
   return useMutation({
     mutationFn: async (kbId: string) => {
       const res = await fetch(`/api/knowledge-bases/${kbId}`, { method: "DELETE" });
-      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? (await res.text()));
+      if (!res.ok) throw new Error(await readErrorMessage(res));
       return (await res.json()) as { ok: boolean };
     },
     onSuccess: async () => {
@@ -75,7 +77,7 @@ export function useUpdateKB() {
           ...(input.description !== undefined ? { description: input.description } : {}),
         }),
       });
-      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? (await res.text()));
+      if (!res.ok) throw new Error(await readErrorMessage(res));
       return (await res.json()) as KnowledgeBase;
     },
     onSuccess: async () => {
