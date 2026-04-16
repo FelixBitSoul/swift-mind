@@ -188,20 +188,28 @@ class ChatService:
         )
 
     def _persist_assistant_message(
-        self, *, user_id: str, conversation_id: str, content: str
+        self,
+        *,
+        user_id: str,
+        conversation_id: str,
+        content: str,
+        metadata: dict | None = None,
     ) -> None:
-        (
-            self._supabase.table("messages")
-            .insert(
-                {
-                    "conversation_id": conversation_id,
-                    "user_id": user_id,
-                    "role": "assistant",
-                    "content": content,
-                }
-            )
-            .execute()
-        )
+        row: dict = {
+            "conversation_id": conversation_id,
+            "user_id": user_id,
+            "role": "assistant",
+            "content": content,
+        }
+        if metadata is not None:
+            row["metadata"] = metadata
+
+        try:
+            self._supabase.table("messages").insert(row).execute()
+        except Exception:
+            # Backward-compatible fallback if DB schema hasn't added `metadata` yet.
+            row.pop("metadata", None)
+            self._supabase.table("messages").insert(row).execute()
 
     def _load_doc_meta(self, *, user_id: str, doc_ids: Sequence[str]) -> dict[str, dict[str, str]]:
         uniq = [d for d in dict.fromkeys([x for x in doc_ids if x])]
@@ -285,7 +293,10 @@ class ChatService:
             if full:
                 # Persist assistant message only once at end
                 self._persist_assistant_message(
-                    user_id=req.user_id, conversation_id=req.conversation_id, content=full
+                    user_id=req.user_id,
+                    conversation_id=req.conversation_id,
+                    content=full,
+                    metadata={"citations": citations},
                 )
             if not sent_finish:
                 # Best-effort finish marker so the client can finalize state.

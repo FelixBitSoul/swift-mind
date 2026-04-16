@@ -7,7 +7,7 @@ import { RagDataStreamChatTransport } from "@/lib/ai/rag-data-stream-chat-transp
 export type RagChatConfig = {
   conversationId: string;
   kbIds: string[];
-  initialMessages?: { id: string; role: "system" | "user" | "assistant"; content: string }[];
+  initialMessages?: { id: string; role: "system" | "user" | "assistant"; content: string; metadata?: unknown }[];
 };
 
 export function useRagChat(config: RagChatConfig) {
@@ -23,6 +23,7 @@ export function useRagChat(config: RagChatConfig) {
       (m): UIMessage => ({
         id: m.id,
         role: m.role,
+        metadata: m.metadata,
         parts: [{ type: "text", text: m.content }],
       })
     ),

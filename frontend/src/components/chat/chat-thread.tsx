@@ -69,7 +69,7 @@ function messageToText(message: unknown): string {
 
 export function ChatThread(props: {
   conversationId: string;
-  initialMessages: { id: string; role: "system" | "user" | "assistant"; content: string }[];
+  initialMessages: { id: string; role: "system" | "user" | "assistant"; content: string; metadata?: unknown }[];
   initialKbIds?: string[];
   autoSendText?: string | null;
   draftId?: string | null;

@@ -18,7 +18,7 @@ export default async function ConversationPage(props: {
 
   const { data, error } = await supabase
     .from("messages")
-    .select("id,role,content,created_at")
+    .select("id,role,content,metadata,created_at")
     .eq("conversation_id", id)
     .eq("user_id", user.id)
     .order("created_at", { ascending: true });
@@ -27,12 +27,16 @@ export default async function ConversationPage(props: {
     // Keep UI simple; user will see empty thread if RLS blocks or convo missing.
   }
 
-  const initialMessages: { id: string; role: "system" | "user" | "assistant"; content: string }[] = (
-    data ?? []
-  ).map((m) => ({
+  const initialMessages: {
+    id: string;
+    role: "system" | "user" | "assistant";
+    content: string;
+    metadata?: unknown;
+  }[] = (data ?? []).map((m) => ({
     id: String(m.id),
     role: m.role as "system" | "user" | "assistant",
     content: String(m.content ?? ""),
+    metadata: (m as { metadata?: unknown }).metadata,
   }));
 
   const kbIdsFromQuery = sp.kb_ids?.trim() ? sp.kb_ids.split(",").map((x) => x.trim()).filter(Boolean) : null;
