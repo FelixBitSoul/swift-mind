@@ -19,6 +19,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSkeleton,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ConversationSidebarItem } from "@/components/app/conversation-sidebar-item";
@@ -30,6 +31,7 @@ export function AppSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { isMobile, setOpenMobile } = useSidebar();
   const { data, isLoading } = useConversations();
   const [creating, setCreating] = useState(false);
   const [optimisticHref, setOptimisticHref] = useState<string | null>(null);
@@ -59,9 +61,10 @@ export function AppSidebar() {
       setOptimisticHref(href);
       startNavigating(() => {
         router.push(href);
+        if (isMobile) setOpenMobile(false);
       });
     },
-    [router]
+    [isMobile, router, setOpenMobile]
   );
 
   const createConversation = useCallback(async () => {

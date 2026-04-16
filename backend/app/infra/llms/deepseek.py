@@ -23,3 +23,18 @@ def get_deepseek_llm(settings: Settings) -> OpenAI:
         streaming=True,
     )
 
+
+def get_deepseek_llm_non_streaming(settings: Settings) -> OpenAI:
+    """
+    Non-streaming DeepSeek OpenAI-compatible HTTP client.
+    Useful for short, one-shot tasks like generating a conversation title.
+    """
+    return OpenAI(
+        model="gpt-4o-mini",
+        additional_kwargs={"model": settings.deepseek_chat_model},
+        api_key=settings.deepseek_api_key,
+        api_base=settings.deepseek_api_base,
+        temperature=0.2,
+        streaming=False,
+    )
+
