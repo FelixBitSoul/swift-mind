@@ -1,6 +1,7 @@
 "use client";
 
 import ReactMarkdown from "react-markdown";
+import type { ReactNode } from "react";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import type { Schema } from "hast-util-sanitize";
@@ -27,21 +28,40 @@ const schema: Schema = {
   },
 };
 
-function emphasizeFootnoteMarkers(markdown: string): string {
-  // Make markers like [1] more visible, without touching fenced code blocks.
-  // We keep it simple and only protect triple-backtick fences.
-  const parts = markdown.split(/(```[\s\S]*?```)/g);
-  return parts
-    .map((part) => {
-      if (part.startsWith("```")) return part;
-      // Replace [n] with bolded marker. This stays valid markdown and survives sanitization.
-      return part.replace(/\[(\d{1,3})\]/g, "**[$1]**");
-    })
-    .join("");
+function highlightFootnoteMarkers(children: ReactNode): ReactNode {
+  const out: ReactNode[] = [];
+  const stack: ReactNode[] = Array.isArray(children) ? children : [children];
+
+  for (const child of stack) {
+    if (typeof child === "string") {
+      const parts = child.split(/\[(\d{1,3})\]/g);
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i] ?? "";
+        // Odd indexes are capture groups (the number).
+        if (i % 2 === 1) {
+          out.push(
+            <span
+              key={`fn-${out.length}`}
+              className="font-semibold text-blue-600 dark:text-blue-400"
+            >
+              [{part}]
+            </span>
+          );
+        } else if (part) {
+          out.push(part);
+        }
+      }
+      continue;
+    }
+
+    // Keep non-string nodes (e.g. links, emphasis) as-is.
+    out.push(child);
+  }
+
+  return out.length === 1 ? out[0] : out;
 }
 
 export function MarkdownMessage(props: { content: string }) {
-  const content = emphasizeFootnoteMarkers(props.content);
   return (
     <div className="text-sm leading-6 text-foreground">
       <ReactMarkdown
@@ -59,13 +79,17 @@ export function MarkdownMessage(props: { content: string }) {
               {children}
             </a>
           ),
-          p: ({ children }) => <p className="whitespace-pre-wrap break-words [&:not(:first-child)]:mt-2">{children}</p>,
+          p: ({ children }) => (
+            <p className="whitespace-pre-wrap break-words [&:not(:first-child)]:mt-2">
+              {highlightFootnoteMarkers(children)}
+            </p>
+          ),
           ul: ({ children }) => <ul className="ml-5 list-disc space-y-1 [&:not(:first-child)]:mt-2">{children}</ul>,
           ol: ({ children }) => <ol className="ml-5 list-decimal space-y-1 [&:not(:first-child)]:mt-2">{children}</ol>,
-          li: ({ children }) => <li className="break-words">{children}</li>,
+          li: ({ children }) => <li className="break-words">{highlightFootnoteMarkers(children)}</li>,
           blockquote: ({ children }) => (
             <blockquote className="mt-2 border-l-2 border-muted-foreground/30 pl-3 text-muted-foreground">
-              {children}
+              {highlightFootnoteMarkers(children)}
             </blockquote>
           ),
           hr: () => <hr className="my-3 border-muted-foreground/20" />,
@@ -94,7 +118,7 @@ export function MarkdownMessage(props: { content: string }) {
           pre: ({ children }) => <pre className="mt-2 overflow-x-auto rounded-md">{children}</pre>,
         }}
       >
-        {content}
+        {props.content}
       </ReactMarkdown>
     </div>
   );

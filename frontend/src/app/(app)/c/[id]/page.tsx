@@ -16,28 +16,43 @@ export default async function ConversationPage(props: {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data, error } = await supabase
+  // Backward-compatible: if DB hasn't added `messages.metadata` yet, retry without it.
+  const withMeta = await supabase
     .from("messages")
     .select("id,role,content,metadata,created_at")
     .eq("conversation_id", id)
     .eq("user_id", user.id)
     .order("created_at", { ascending: true });
+  const withoutMeta =
+    withMeta.error &&
+    // Common PostgREST error: column not found
+    (withMeta.error.message.includes("metadata") ||
+      withMeta.error.message.toLowerCase().includes("column") ||
+      withMeta.error.message.toLowerCase().includes("not found"))
+      ? await supabase
+          .from("messages")
+          .select("id,role,content,created_at")
+          .eq("conversation_id", id)
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: true })
+      : null;
 
-  if (error) {
-    // Keep UI simple; user will see empty thread if RLS blocks or convo missing.
-  }
+  const data = (withoutMeta?.data ?? withMeta.data ?? []) as unknown[];
 
   const initialMessages: {
     id: string;
     role: "system" | "user" | "assistant";
     content: string;
     metadata?: unknown;
-  }[] = (data ?? []).map((m) => ({
-    id: String(m.id),
-    role: m.role as "system" | "user" | "assistant",
-    content: String(m.content ?? ""),
-    metadata: (m as { metadata?: unknown }).metadata,
-  }));
+  }[] = (data ?? []).map((m) => {
+    const row = m as Record<string, unknown>;
+    return {
+      id: String(row.id),
+      role: row.role as "system" | "user" | "assistant",
+      content: String(row.content ?? ""),
+      metadata: row.metadata,
+    };
+  });
 
   const kbIdsFromQuery = sp.kb_ids?.trim() ? sp.kb_ids.split(",").map((x) => x.trim()).filter(Boolean) : null;
   const { data: convoRow } = await supabase
