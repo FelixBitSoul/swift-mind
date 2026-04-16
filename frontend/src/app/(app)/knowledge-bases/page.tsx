@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useRef, useState } from "react"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -44,6 +45,7 @@ const createSchema = z.object({
 type CreateValues = z.infer<typeof createSchema>
 
 export default function KnowledgeBasesPage() {
+  const router = useRouter()
   const kbsQuery = useKBs()
   const createMutation = useCreateKB()
   const deleteMutation = useDeleteKB()
@@ -173,7 +175,29 @@ export default function KnowledgeBasesPage() {
               const matchesName = deleteConfirmText.trim() === kb.name.trim()
 
               return (
-            <Card key={kb.id}>
+            <Card
+              key={kb.id}
+              role="link"
+              tabIndex={0}
+              aria-label={`Open knowledge base ${kb.name}`}
+              className={cn(
+                "transition-colors",
+                "cursor-pointer hover:bg-muted/30"
+              )}
+              onClick={(e) => {
+                // Only navigate when clicking on non-interactive blank areas.
+                const target = e.target as HTMLElement | null
+                if (target?.closest('a,button,input,textarea,select,[role="button"],[data-no-card-nav]')) return
+                router.push(`/knowledge-bases/${encodeURIComponent(kb.id)}`)
+              }}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter" && e.key !== " ") return
+                const target = e.target as HTMLElement | null
+                if (target?.closest('a,button,input,textarea,select,[role="button"],[data-no-card-nav]')) return
+                e.preventDefault()
+                router.push(`/knowledge-bases/${encodeURIComponent(kb.id)}`)
+              }}
+            >
               <CardHeader className="flex flex-row items-center justify-between gap-4">
                 <div className="min-w-0 flex-1">
 
@@ -226,6 +250,7 @@ export default function KnowledgeBasesPage() {
                     title="Click to rename"
                     role="button"
                     tabIndex={0}
+                    data-no-card-nav
                     onClick={() => {
                       setEditingId(kb.id)
                       setEditingName(kb.name)
@@ -326,6 +351,7 @@ export default function KnowledgeBasesPage() {
                     title="Click to edit description"
                     role="button"
                     tabIndex={0}
+                    data-no-card-nav
                     onClick={() => {
                       setEditingDescId(kb.id)
                       setEditingDesc(kb.description ?? "")
