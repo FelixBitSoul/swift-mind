@@ -32,6 +32,9 @@ dist/
 coverage/
 .turbo/
 
+# Git worktrees (local dev)
+.worktrees/
+
 # Supabase local (if used)
 supabase/.branches/
 supabase/.temp/
