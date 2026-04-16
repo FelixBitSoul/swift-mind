@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { ArrowDownIcon, XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -75,6 +76,7 @@ export function ChatThread(props: {
   draftId?: string | null;
 }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const containerClass = "mx-auto w-full px-4 md:max-w-3xl lg:max-w-[40rem] xl:max-w-[48rem]";
   const [kbIds, setKbIds] = useState<string[]>(props.initialKbIds ?? []);
   const [input, setInput] = useState("");
@@ -104,6 +106,17 @@ export function ChatThread(props: {
   const isLoading = status === "streaming" || status === "submitted";
   const hasAutoSentRef = useRef(false);
   const lastPersistedKbIdsRef = useRef<string | null>(null);
+  const titleGenTriggeredRef = useRef<Set<string>>(new Set());
+
+  const roleCounts = useMemo(() => {
+    let user = 0;
+    let assistant = 0;
+    for (const m of rendered) {
+      if (m.role === "user") user += 1;
+      if (m.role === "assistant") assistant += 1;
+    }
+    return { user, assistant };
+  }, [rendered]);
 
   useEffect(() => {
     if (!props.conversationId || props.conversationId === "__draft__") return;
@@ -128,6 +141,25 @@ export function ChatThread(props: {
     hasAutoSentRef.current = true;
     void sendText(text);
   }, [props.autoSendText, rendered?.length, sendText]);
+
+  useEffect(() => {
+    const id = props.conversationId;
+    if (!id || id === "__draft__") return;
+    if (titleGenTriggeredRef.current.has(id)) return;
+    if (isLoading) return;
+    if (roleCounts.user < 1) return;
+    if (roleCounts.assistant !== 1) return;
+
+    titleGenTriggeredRef.current.add(id);
+    void fetch(`/api/conversations/${encodeURIComponent(id)}/title/generate`, { method: "POST" })
+      .then((res) => {
+        if (!res.ok) return;
+        return queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      })
+      .catch(() => {
+        // best-effort; ignore failures silently
+      });
+  }, [props.conversationId, isLoading, roleCounts.user, roleCounts.assistant, queryClient]);
 
   const showWelcome = rendered.length === 0;
 
@@ -257,7 +289,7 @@ export function ChatThread(props: {
           }}
           className="flex-1 overflow-auto"
         >
-          <div className={cn(containerClass, "flex flex-col gap-4 py-4 pb-40")}>
+          <div className={cn(containerClass, "flex flex-col gap-4 py-4 pb-36 sm:pb-40")}>
             {showWelcome ? (
               <div className="rounded-xl border bg-muted/20 p-5">
                 <div className="text-sm font-medium">欢迎来到知识库对话</div>
@@ -393,7 +425,7 @@ export function ChatThread(props: {
         </div>
 
         {!isPinnedToBottom ? (
-          <div className="pointer-events-none absolute bottom-28 left-0 right-0 z-10">
+          <div className="pointer-events-none absolute bottom-[calc(8rem+env(safe-area-inset-bottom))] left-0 right-0 z-10 sm:bottom-[calc(7rem+env(safe-area-inset-bottom))]">
             <div className={cn(containerClass, "flex justify-center")}>
               <Button
                 type="button"
@@ -416,7 +448,7 @@ export function ChatThread(props: {
           </div>
         ) : null}
 
-        <div className="pointer-events-none absolute bottom-4 left-0 right-0 z-10">
+        <div className="pointer-events-none absolute bottom-[calc(1rem+env(safe-area-inset-bottom))] left-0 right-0 z-10">
           <div className={containerClass}>
             <form
               onSubmit={(e) => {

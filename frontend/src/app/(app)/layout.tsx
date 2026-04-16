@@ -1,8 +1,9 @@
 import { PropsWithChildren } from "react";
 
 import { AppSidebar } from "@/components/app/app-sidebar";
+import { ThemeSwitcher } from "@/components/app/theme-switcher";
 import { UserMenu } from "@/components/app/user-menu";
-import { SidebarInset, SidebarProvider, SidebarRail } from "@/components/ui/sidebar";
+import { SidebarInset, SidebarProvider, SidebarRail, SidebarTrigger } from "@/components/ui/sidebar";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export default async function AppLayout({ children }: PropsWithChildren) {
@@ -26,8 +27,14 @@ export default async function AppLayout({ children }: PropsWithChildren) {
       <SidebarRail />
       <SidebarInset className="min-h-0">
         <header className="sticky top-0 z-20 border-b bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/75">
-          <div className="flex h-14 items-center justify-end px-4 sm:px-6">
-            <UserMenu email={user?.email} displayName={displayName} avatarUrl={avatarUrl} />
+          <div className="flex h-14 items-center justify-between px-4 sm:px-6">
+            <div className="flex items-center gap-2">
+              <SidebarTrigger className="md:hidden" />
+            </div>
+            <div className="flex items-center gap-1">
+              <ThemeSwitcher />
+              <UserMenu email={user?.email} displayName={displayName} avatarUrl={avatarUrl} />
+            </div>
           </div>
         </header>
         <div className="flex min-h-0 flex-1 flex-col">{children}</div>

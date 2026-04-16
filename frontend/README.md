@@ -96,6 +96,7 @@ These are Next.js Route Handlers that enforce Supabase session and/or proxy to t
 - `DELETE /api/documents/:id` → backend `DELETE /api/documents/:id`
 - `GET/POST /api/conversations`
 - `PATCH/DELETE /api/conversations/:id` (rename/delete in sidebar menu)
+- `POST /api/conversations/:id/title/generate` → backend `POST /api/conversations/:id/title/generate`
 
 ## Learn More
 
