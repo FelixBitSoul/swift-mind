@@ -2,6 +2,7 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { AuthShell } from "@/components/auth/auth-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -51,7 +52,7 @@ export default async function LoginPage(props: { searchParams: SearchParams }) {
   }
 
   return (
-    <div className="min-h-svh flex items-center justify-center p-4">
+    <AuthShell subtitle="Sign in to continue">
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle>Login</CardTitle>
@@ -80,7 +81,7 @@ export default async function LoginPage(props: { searchParams: SearchParams }) {
           </div>
         </CardContent>
       </Card>
-    </div>
+    </AuthShell>
   );
 }
 

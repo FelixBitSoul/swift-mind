@@ -1,22 +1,152 @@
-## Backend: generate conversation title (after first turn)
+# 2026-04-16 — 对话标题自动生成 + 移动端适配 + 主题切换（设计）
 
-### Endpoint
+## 背景与目标
 
-- **method/path**: `POST /api/conversations/{id}/title/generate`
-- **auth**: required `Authorization: Bearer <Supabase JWT>`
-- **response**: `200 OK`
+本次改动覆盖 3 个用户可感知的体验点：
 
-```json
-{ "data": { "title": "..." } }
-```
+- **对话标题自动生成**：从当前“首条用户输入截断”升级为“首轮对话完成后自动生成更贴切标题”，并避免覆盖用户手动重命名。
+- **移动端适配优化**：改善小屏下侧边栏、输入框、滚动与可读性，减少遮挡与误触。
+- **亮/暗主题切换**：默认跟随系统；支持用户手动切换并持久化；入口放在右上角头像左侧。
 
-### Behavior
+非目标：
 
-- **Source text**: uses the first **user** message, plus the first **assistant** message after that, in `messages` (ordered by `created_at ASC`), scoped by authenticated `user_id`.
-- **First turn incomplete**: if either first user or assistant message is missing, returns **`409`**.
-- **Do not overwrite custom titles**: updates `conversations.title` **only** when title is considered “default”:
-  - null / blank
-  - exactly `"New conversation"` or `"Untitled"`
-  - exactly equals the frontend draft title: first user text trimmed, truncated to 60 chars with an ellipsis (`…`) when longer
-- **LLM constraints**: non-streaming DeepSeek completion; output is cleaned (no URLs/markdown/quotes) and bounded to <= 40 chars before persisting.
+- 不做新的信息架构（不新增“会话管理页”）。
+- 不改动 RAG 逻辑与引用渲染逻辑（除非移动端样式需要微调）。
 
+## 现状（从代码确认）
+
+- 会话结构 `Conversation` 含 `title: string | null`，侧栏已支持手动重命名（`PATCH /api/conversations/:id`）。
+- 新建对话时（草稿转正）在前端以首条用户输入截断（60 字）作为标题写入：`POST /api/conversations { title, kb_ids }`。
+- UI 里已经存在 `dark:` 相关 class（说明 Tailwind 暗色模式具备基础），但缺少“主题 provider + 切换与持久化”的机制与入口。
+
+## 1. 对话标题自动生成（首轮后 AI 生成）
+
+### 用户体验定义
+
+- **触发时机**：对话的**首轮完成**后触发生成（用户第一条消息 + AI 第一条回复完成并渲染后）。
+- **覆盖条件（幂等）**：
+  - 仅当会话当前标题满足以下任一条件时，才允许自动写入：
+    - `title` 为 `null` / 空字符串；
+    - `title` 等于“默认标题”（由系统生成的截断标题）。
+  - 若用户已手动重命名（标题不再是默认），则**永不自动覆盖**。
+- **生成结果约束**：
+  - 中文：8–20 字为宜；英文：3–8 个词为宜。
+  - 不包含 markdown、引号包裹、emoji、URL。
+  - 偏“主题概括”，不复述完整问题。
+- **失败回退**：任何错误（接口失败/模型失败/校验失败）均不影响对话；保持原标题不变。
+
+### 设计选择
+
+采用“**后端生成标题**”作为单一可信来源，前端只负责触发与展示。
+
+原因：
+
+- 生成需要模型调用，遵循仓库规则（HTTP-only，统一从后端走）。
+- 便于做一致的幂等校验与并发控制（避免多次触发生成造成覆盖）。
+
+### API 与数据流
+
+新增一个后端能力（具体路由在 implementation plan 里落到实际文件与路径）：
+
+- `POST /api/conversations/{id}/title:generate`
+  - **Auth**：必须 `Authorization: Bearer <Supabase JWT>`；服务端从 JWT 获取 `user_id`，禁止从请求体读 `user_id`。
+  - **输入**：可选 `{ mode?: "first_turn" }`（默认 `first_turn`）。
+  - **行为**：
+    1. 校验该会话属于当前用户。
+    2. 读取会话当前 `title` 与首轮内容（第一条 user + 第一条 assistant 的文本内容；或至少第一条 user + 最新 assistant，具体以现有消息表结构为准）。
+    3. 若标题已不是默认标题，则返回 204/200（无变更）。
+    4. 调用 LLM 生成标题。
+    5. 服务端二次校验标题约束（长度、去噪、禁止 URL/emoji/markdown）。
+    6. 写回 `conversations.title` 并返回 `{ data: { title } }`。
+  - **幂等性**：
+    - 若重复调用且标题已更新为非默认，后续调用不再覆盖。
+
+前端触发点：
+
+- 在 `ChatThread` 中检测“首轮完成”：
+  - 当消息列表从 0→包含首个 user 与首个 assistant 且 streaming 结束时触发一次。
+  - 触发后调用 `POST /api/conversations/{id}/title:generate`。
+  - 成功后刷新会话列表 query（`["conversations"]`），让侧栏即时更新标题。
+
+### 默认标题判定
+
+为避免误判用户自定义标题，默认标题需要一种可判定形式：
+
+- 推荐：在创建对话时把“临时截断标题”同时写入，并在后端以“是否与由首条 user 截断得到的结果一致”作为默认判定。
+- 备选（更可靠）：在 `conversations` 增加一个 `title_is_auto boolean` 字段，自动标题与截断标题都标记为 `true`，用户手动重命名时置 `false`。本次若涉及 DB schema 变更，需要同步更新 `supabase.sql` 与相关代码。
+
+本 spec 不强制选哪种，implementation plan 阶段根据现有 schema 决定成本更低的方案；原则是**绝不覆盖用户手动重命名**。
+
+## 2. 移动端适配优化
+
+### 目标问题清单
+
+- 侧边栏在小屏占空间、返回/切换不顺畅。
+- 输入框绝对定位可能与安全区/软键盘冲突，导致遮挡最后一条消息或操作按钮。
+- 内容宽度、气泡最大宽度与间距在小屏下的阅读舒适度需要优化。
+
+### 设计策略（小修小补）
+
+- **侧边栏**：
+  - 小屏默认收起（抽屉式）。
+  - 打开/关闭有明确按钮与遮罩点击关闭。
+  - 导航到会话后自动关闭抽屉（减少多一步手动关闭）。
+- **Header 与操作区**：
+  - 维持 sticky header，但确保不与输入框遮挡。
+- **输入框与安全区**：
+  - 给底部输入容器加 `padding-bottom: env(safe-area-inset-bottom)`。
+  - 让滚动区域的底部 padding 与输入高度联动或提高裕量，避免最后一条消息被输入框遮挡。
+- **消息气泡**：
+  - 用户气泡最大宽度在小屏放宽（例如 90%）并控制行高与字号。
+- **“回到底部”按钮**：
+  - 小屏下避免与输入框重叠（位置上移或改为贴近输入框上方）。
+
+### 验收标准（移动端）
+
+- iPhone/Android 常见宽度（360–430px）：
+  - 输入框不遮挡最后一条消息；键盘弹起仍可继续输入与发送；
+  - 侧边栏可打开/关闭，点击会话跳转后自动收起；
+  - 内容可读性明显提升（不出现横向滚动、不挤压）。
+
+## 3. 亮/暗主题 + 切换（快捷入口）
+
+### 用户体验定义
+
+- **默认**：跟随系统。
+- **切换**：
+  - 在右上角 **头像左侧** 提供一个快捷按钮（图标）；
+  - 点击打开一个小菜单：`跟随系统 / 亮色 / 暗色`；
+  - 选择后立即生效，并持久化；优先级高于系统主题。
+- **持久化范围**：前端本地持久化（localStorage/cookie 皆可），无需后端落库。
+
+### 技术选择
+
+推荐使用 `next-themes`：
+
+- SSR 友好（配合 `suppressHydrationWarning`）；
+- 与 Tailwind `dark` class 配合成熟；
+- 支持 system + user override 的模型。
+
+### 入口位置
+
+在 `(app)/layout.tsx` 的 header 右侧区域（`UserMenu` 左侧）添加主题切换控件，保持点击目标足够大（移动端友好）。
+
+## 风险与边界
+
+- **自动标题覆盖风险**：必须严格保证不覆盖用户手动重命名；需要明确“默认标题”的判定策略与并发控制。
+- **移动端键盘**：不同浏览器对 `100vh`、软键盘与安全区处理差异较大，需用真实设备/模拟器验证。
+- **主题闪烁（FOUC）**：确保主题 class 在首屏尽早生效；必要时在 root layout 加载前注入 theme 初始化（由 `next-themes` 方案解决）。
+
+## 测试计划（最小可行）
+
+- 新建对话：
+  - 首条发送后会话成功创建，标题初始可为截断；
+  - 首轮完成后标题自动更新为 AI 生成结果；
+  - 手动重命名后，后续不再被自动标题覆盖。
+- 移动端：
+  - 侧边栏抽屉开关与导航后自动收起；
+  - 输入框不遮挡消息，键盘弹起仍可发送。
+- 主题：
+  - 默认跟随系统；
+  - 切换到亮/暗后刷新页面保持；
+  - 登录/注册页也同样生效。
