@@ -1,4 +1,4 @@
-import type { UIMessageChunk, UIMessageStreamOptions } from "ai";
+import type { UIMessage, UIMessageChunk } from "ai";
 import { HttpChatTransport } from "ai";
 
 type RagCitations = { citations?: unknown };
@@ -72,15 +72,26 @@ function dataStreamToUiMessageChunks(stream: ReadableStream<string>): ReadableSt
   );
 }
 
-export class RagDataStreamChatTransport<UI_MESSAGE extends { id: string; role: string; parts: unknown[] }>
+export class RagDataStreamChatTransport<UI_MESSAGE extends UIMessage>
   extends HttpChatTransport<UI_MESSAGE>
 {
   processResponseStream(
-    stream: ReadableStream<Uint8Array>,
-    options: UIMessageStreamOptions<UI_MESSAGE>
+    stream: ReadableStream<Uint8Array<ArrayBufferLike>>
   ): ReadableStream<UIMessageChunk> {
-    void options;
-    return dataStreamToUiMessageChunks(stream.pipeThrough(new TextDecoderStream()));
+    const decoder = new TextDecoder();
+    const decoded = stream.pipeThrough(
+      new TransformStream<Uint8Array<ArrayBufferLike>, string>({
+        transform(chunk, controller) {
+          controller.enqueue(decoder.decode(chunk, { stream: true }));
+        },
+        flush(controller) {
+          const tail = decoder.decode();
+          if (tail) controller.enqueue(tail);
+        },
+      })
+    );
+
+    return dataStreamToUiMessageChunks(decoded);
   }
 }
 
