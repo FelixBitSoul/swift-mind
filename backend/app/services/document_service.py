@@ -8,7 +8,6 @@ from supabase import Client
 
 from ..core.config import Settings
 from ..infra.supabase.client import get_supabase_client
-from .ingestion_service import IngestionService, IngestRequest
 
 
 def _supabase(settings: Settings) -> Client:
@@ -20,7 +19,21 @@ def _guess_mime_type(filename: str) -> str | None:
     return guessed
 
 
-_ALLOWED_DOC_EXT = frozenset({".pdf", ".md", ".markdown"})
+_ALLOWED_DOC_EXT = frozenset(
+    {
+        ".pdf",
+        ".md",
+        ".markdown",
+        ".txt",
+        ".html",
+        ".htm",
+        ".docx",
+        ".doc",
+        ".xlsx",
+        ".xls",
+        ".csv",
+    }
+)
 
 
 def _safe_ext(filename: str) -> str:
@@ -73,14 +86,16 @@ async def upload_kb_document_file(
     if not ext and mime in ("text/markdown", "text/x-markdown"):
         ext = ".md"
     if ext not in _ALLOWED_DOC_EXT:
-        raise RuntimeError("Only PDF and Markdown (.md, .markdown) uploads are supported")
+        raise RuntimeError(
+            "Unsupported file type. Supported: pdf, md/markdown, txt, html/htm, doc/docx, xls/xlsx, csv"
+        )
 
     if ext in (".md", ".markdown"):
         mime = content_type or _guess_mime_type(filename) or "text/markdown"
     elif ext == ".pdf":
         mime = content_type or _guess_mime_type(filename) or "application/pdf"
 
-    ingest_filetype = "md" if ext in (".md", ".markdown") else "pdf"
+    ingest_filetype = ext.lstrip(".") or None
     doc_id = str(uuid.uuid4())
     bucket = settings.kb_documents_bucket
     storage_path = f"{user_id}/{kb_id}/{doc_id}{ext}"
@@ -127,27 +142,10 @@ async def upload_kb_document_file(
             "user_id", user_id
         ).execute()
 
-    def _delete_chunks_best_effort() -> None:
-        supabase.table("doc_chunks").delete().eq("doc_id", doc_id).eq("user_id", user_id).execute()
-
     await anyio.to_thread.run_sync(_insert_row)
     try:
         await anyio.to_thread.run_sync(_upload_storage)
-        await anyio.to_thread.run_sync(_update_status, "processing", None)
-
-        def _ingest() -> None:
-            IngestionService(settings).ingest(
-                IngestRequest(
-                    user_id=user_id,
-                    kb_id=kb_id,
-                    doc_id=doc_id,
-                    bucket=bucket,
-                    path=storage_path,
-                    filetype=ingest_filetype,
-                )
-            )
-
-        await anyio.to_thread.run_sync(_ingest)
+        await anyio.to_thread.run_sync(_update_status, "uploaded", None)
 
         def _fetch_row() -> dict:
             resp = (
@@ -164,7 +162,6 @@ async def upload_kb_document_file(
 
         return await anyio.to_thread.run_sync(_fetch_row)
     except Exception as e:
-        await anyio.to_thread.run_sync(_delete_chunks_best_effort)
         await anyio.to_thread.run_sync(_update_status, "failed", str(e))
         raise
 

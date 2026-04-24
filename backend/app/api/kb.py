@@ -15,6 +15,7 @@ class KnowledgeBaseOut(BaseModel):
     id: str
     name: str
     description: str | None = None
+    ingest_config: dict | None = None
     created_at: str
     updated_at: str
 
@@ -31,6 +32,7 @@ class CreateKnowledgeBaseBody(BaseModel):
 class UpdateKnowledgeBaseBody(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=200)
     description: str | None = Field(None, max_length=2000)
+    ingest_config: dict | None = None
 
 
 class DeleteKnowledgeBaseResponse(BaseModel):
@@ -97,8 +99,10 @@ async def patch_kb(
     id: str = Path(..., description="Knowledge base id"),
     user: CurrentUser = Depends(get_current_user),
 ) -> KnowledgeBaseOut:
-    if body.name is None and body.description is None:
-        raise HTTPException(status_code=422, detail="At least one of name/description is required")
+    if body.name is None and body.description is None and body.ingest_config is None:
+        raise HTTPException(
+            status_code=422, detail="At least one of name/description/ingest_config is required"
+        )
     try:
         settings = get_settings()
         row = await update_kb(
@@ -107,6 +111,7 @@ async def patch_kb(
             kb_id=id,
             name=body.name,
             description=body.description,
+            ingest_config=body.ingest_config,
         )
         return KnowledgeBaseOut(**row)
     except Exception as e:

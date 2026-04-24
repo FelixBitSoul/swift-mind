@@ -8,6 +8,7 @@ export type KnowledgeBase = {
   id: string;
   name: string;
   description: string | null;
+  ingest_config?: unknown | null;
   created_at: string;
   updated_at: string;
 };

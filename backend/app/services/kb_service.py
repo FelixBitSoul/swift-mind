@@ -43,7 +43,7 @@ async def get_user_kbs(
     def _run() -> list[dict]:
         resp = (
             supabase.table("knowledge_bases")
-            .select("id,name,description,created_at,updated_at")
+            .select("id,name,description,ingest_config,created_at,updated_at")
             .eq("user_id", user_id)
             .order("created_at", desc=order_by_created_at_desc)
             .execute()
@@ -60,6 +60,7 @@ async def update_kb(
     kb_id: str,
     name: str | None = None,
     description: str | None = None,
+    ingest_config: dict[str, Any] | None = None,
 ) -> dict:
     supabase = _supabase(settings)
 
@@ -68,6 +69,8 @@ async def update_kb(
         payload["name"] = name
     if description is not None:
         payload["description"] = description
+    if ingest_config is not None:
+        payload["ingest_config"] = ingest_config
     if not payload:
         raise RuntimeError("No fields to update")
 

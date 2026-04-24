@@ -51,6 +51,10 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { cn } from "@/lib/utils"
+import { useIngestOptions } from "@/hooks/use-ingest-options"
+import { IngestConfigForm, type IngestConfig, type IngestOptions } from "@/components/kb/ingest-config-form"
+import { useKBs } from "@/hooks/use-knowledge-bases"
+import { useUpdateKBIngestConfig } from "@/hooks/use-kb-ingest-config"
 
 function statusLabel(status: string) {
   if (status === "processing") return "Processing"
@@ -107,6 +111,10 @@ export default function KnowledgeBaseDetailPage() {
   const params = useParams<{ id: string }>()
   const kbId = params.id
 
+  const kbsQuery = useKBs()
+  const updateKBIngest = useUpdateKBIngestConfig()
+  const ingestOptionsQuery = useIngestOptions()
+
   const docsQuery = useKBDocuments(kbId)
   const deleteDoc = useDeleteDocument({ kbId })
   const uploadDocs = useUploadKBDocuments({ kbId })
@@ -123,6 +131,27 @@ export default function KnowledgeBaseDetailPage() {
   const [sortBy, setSortBy] = useState<"updated_desc" | "created_desc" | "title_asc">("updated_desc")
   const [pageSize, setPageSize] = useState(20)
   const [page, setPage] = useState(1)
+
+  const [uploadAdvancedOpen, setUploadAdvancedOpen] = useState(false)
+  const [uploadIngestConfig, setUploadIngestConfig] = useState<IngestConfig>({
+    parser_id: "pymupdf",
+    parser_params: {},
+    splitter_id: "sentence",
+    splitter_params: { chunk_size: 1024, chunk_overlap: 128 },
+  })
+
+  useEffect(() => {
+    const kb = kbsQuery.data?.find((k) => k.id === kbId)
+    const cfg = (kb as any)?.ingest_config
+    if (!cfg || typeof cfg !== "object") return
+    setUploadIngestConfig((prev) => ({
+      parser_id: typeof cfg.parser_id === "string" ? cfg.parser_id : prev.parser_id,
+      parser_params: typeof cfg.parser_params === "object" && cfg.parser_params ? cfg.parser_params : prev.parser_params,
+      splitter_id: typeof cfg.splitter_id === "string" ? cfg.splitter_id : prev.splitter_id,
+      splitter_params:
+        typeof cfg.splitter_params === "object" && cfg.splitter_params ? cfg.splitter_params : prev.splitter_params,
+    }))
+  }, [kbId, kbsQuery.data])
 
   const docs = useMemo(() => docsQuery.data ?? [], [docsQuery.data])
   const hasProcessing = useMemo(
@@ -237,15 +266,40 @@ export default function KnowledgeBaseDetailPage() {
     if (!files?.length) return
     const allowed = (f: File) => {
       const n = f.name.toLowerCase()
-      return n.endsWith(".pdf") || n.endsWith(".md") || n.endsWith(".markdown")
+      return (
+        n.endsWith(".pdf") ||
+        n.endsWith(".md") ||
+        n.endsWith(".markdown") ||
+        n.endsWith(".txt") ||
+        n.endsWith(".html") ||
+        n.endsWith(".htm") ||
+        n.endsWith(".docx") ||
+        n.endsWith(".xlsx") ||
+        n.endsWith(".xls") ||
+        n.endsWith(".csv")
+      )
     }
     const picked = Array.from(files).filter(allowed)
     if (!picked.length) {
-      toast.error("Only PDF and Markdown (.md, .markdown) files are supported")
+      toast.error("Unsupported file type", {
+        description: "Supported: pdf, md/markdown, txt, html/htm, docx, xls/xlsx, csv",
+      })
       return
     }
     try {
-      await uploadDocs.mutateAsync(picked)
+      const overrides = uploadAdvancedOpen
+        ? {
+            parser_config: {
+              parser_id: uploadIngestConfig.parser_id,
+              params: uploadIngestConfig.parser_params,
+            },
+            splitter_config: {
+              splitter_id: uploadIngestConfig.splitter_id,
+              params: uploadIngestConfig.splitter_params,
+            },
+          }
+        : {}
+      await uploadDocs.mutateAsync({ files: picked, ...overrides })
       toast.success(`Uploaded ${picked.length} file${picked.length === 1 ? "" : "s"}`)
     } catch (e) {
       toast.error("Upload failed", { description: e instanceof Error ? e.message : String(e) })
@@ -275,7 +329,7 @@ export default function KnowledgeBaseDetailPage() {
           <input
             ref={fileInputRef}
             type="file"
-            accept="application/pdf,.pdf,text/markdown,.md,.markdown"
+            accept="application/pdf,.pdf,text/markdown,.md,.markdown,text/plain,.txt,text/html,.html,.htm,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx,application/vnd.ms-excel,.xls,text/csv,.csv"
             multiple
             className="hidden"
             onChange={(e) => void onPickFiles(e.target.files)}
@@ -307,6 +361,58 @@ export default function KnowledgeBaseDetailPage() {
       </div>
 
       <Separator />
+
+      <Card className="min-w-0">
+        <CardHeader>
+          <CardTitle>Ingest configuration</CardTitle>
+          <CardDescription>Default parser/splitter for this knowledge base.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {ingestOptionsQuery.isLoading ? (
+            <div className="text-sm text-muted-foreground">Loading options…</div>
+          ) : ingestOptionsQuery.isError ? (
+            <div className="text-sm text-destructive">Failed to load options</div>
+          ) : (
+            <>
+              <IngestConfigForm
+                options={ingestOptionsQuery.data as unknown as IngestOptions}
+                value={uploadIngestConfig}
+                onChange={setUploadIngestConfig}
+              />
+              <div className="flex items-center justify-end gap-2">
+                <Button
+                  variant="outline"
+                  disabled={updateKBIngest.isPending || !kbsQuery.data?.some((k) => k.id === kbId)}
+                  onClick={async () => {
+                    try {
+                      await updateKBIngest.mutateAsync({
+                        kbId,
+                        ingest_config: {
+                          parser_id: uploadIngestConfig.parser_id,
+                          parser_params: uploadIngestConfig.parser_params,
+                          splitter_id: uploadIngestConfig.splitter_id,
+                          splitter_params: uploadIngestConfig.splitter_params,
+                        },
+                      })
+                      toast.success("Saved ingest config")
+                    } catch (e) {
+                      toast.error("Save failed", { description: e instanceof Error ? e.message : String(e) })
+                    }
+                  }}
+                >
+                  {updateKBIngest.isPending ? "Saving…" : "Save to KB"}
+                </Button>
+                <Button
+                  variant={uploadAdvancedOpen ? "default" : "outline"}
+                  onClick={() => setUploadAdvancedOpen((v) => !v)}
+                >
+                  Upload overrides: {uploadAdvancedOpen ? "On" : "Off"}
+                </Button>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       {docsQuery.isLoading ? (
         <div className="text-sm text-muted-foreground">Loading…</div>
